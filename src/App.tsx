@@ -3,8 +3,8 @@ import { CalendarDays, ChartColumn, ClipboardList, House, Sparkles, UserRound } 
 import AiAssistantView from './components/AiAssistantView';
 import DashboardView from './components/DashboardView';
 import GradesView from './components/GradesView';
-import LoginScreen from './components/LoginScreen';
-import ProfileView from './components/ProfileView';
+import { LoginScreen } from './components/LoginScreen';
+import { ProfileView } from './components/ProfileView';
 import RequestsView from './components/RequestsView';
 import ScheduleView from './components/ScheduleView';
 import { mockGrades, mockNotifications, mockRequests, mockSchedule, mockUser } from './mockData';
