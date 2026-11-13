@@ -1,146 +1,125 @@
-import { motion } from 'framer-motion';
-import { CheckCircle2, Clock, Zap } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Check, FastForward, ShieldCheck } from 'lucide-react';
 import type { RequestItem } from '../types';
+import { REQUEST_STAGES } from './ui/tokens';
 
 interface LiveRequestTrackerProps {
   request: RequestItem;
   onStageChange: (request: RequestItem) => void;
 }
 
-const STAGES = [
-  { number: 1, label: 'Зарегистрирована', description: 'в СЭД' },
-  { number: 2, label: 'На проверке', description: 'в деканате' },
-  { number: 3, label: 'На подписи', description: 'делегат' },
-  { number: 4, label: 'Подписано', description: 'ЭЦП' },
-  { number: 5, label: 'Готово', description: 'к выдаче' },
-];
-
-const STAGE_COLORS: Record<number, string> = {
-  1: 'from-blue-500 to-blue-600',
-  2: 'from-amber-500 to-amber-600',
-  3: 'from-purple-500 to-purple-600',
-  4: 'from-emerald-500 to-emerald-600',
-  5: 'from-green-500 to-green-600',
-};
+const STAMP_KEYS = ['registered', 'inReview', 'inSigning', 'signed', 'ready'] as const;
 
 export const LiveRequestTracker = ({ request, onStageChange }: LiveRequestTrackerProps) => {
   const currentStage = request.stage || 1;
 
   const handleAdvanceStage = () => {
-    if (currentStage < 5) {
-      const newRequest = {
-        ...request,
-        stage: (currentStage + 1) as 1 | 2 | 3 | 4 | 5,
-        status: STAGES[currentStage]?.label as any,
-        updatedAt: new Date().toLocaleString('ru-RU'),
-      };
-
-      if (currentStage === 4) {
-        // На последнем этапе добавляем QR-код и время
-        newRequest.verificationQrCode = `MGIMO-${request.id}-${Date.now()}`;
-      }
-
-      onStageChange(newRequest);
+    if (currentStage >= 5) return;
+    const next = REQUEST_STAGES[currentStage];
+    const stamp = new Date().toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const updated: RequestItem = {
+      ...request,
+      stage: next.stage,
+      status: next.status,
+      updatedAt: stamp,
+      timestamps: { ...request.timestamps, [STAMP_KEYS[next.stage - 1]]: stamp },
+    };
+    if (next.stage === 5 && !updated.verificationQrCode) {
+      updated.verificationQrCode = `MGIMO-${request.id.slice(-6).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
     }
+    onStageChange(updated);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Жизненный цикл */}
-      <div className="relative">
-        {/* Линия соединения этапов */}
-        <div className="absolute top-8 left-0 right-0 h-1 bg-slate-200 -z-10">
-          <motion.div
-            className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500"
-            animate={{ width: `${(currentStage / 5) * 100}%` }}
-            transition={{ duration: 0.6 }}
-          />
-        </div>
-
-        {/* Этапы */}
-        <div className="flex justify-between">
-          {STAGES.map((stage) => {
-            const isCompleted = stage.number < currentStage;
-            const isCurrent = stage.number === currentStage;
-
-            return (
-              <motion.div
-                key={stage.number}
-                className="flex flex-col items-center relative z-10"
-              >
-                <motion.div
+    <div>
+      <ol className="relative">
+        {REQUEST_STAGES.map((stage, index) => {
+          const done = stage.stage < currentStage || currentStage === 5;
+          const current = stage.stage === currentStage && currentStage < 5;
+          const stamp = request.timestamps?.[STAMP_KEYS[index]] ?? (stage.stage === 1 ? request.createdAt : undefined);
+          const last = index === REQUEST_STAGES.length - 1;
+          return (
+            <li key={stage.stage} className="relative flex gap-3 pb-5 last:pb-0">
+              {!last && (
+                <span className="absolute left-[13px] top-7 h-[calc(100%-1.75rem)] w-0.5 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+                  <motion.span
+                    className="block w-full bg-blue-600"
+                    initial={false}
+                    animate={{ height: stage.stage < currentStage ? '100%' : '0%' }}
+                    transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                </span>
+              )}
+              <span className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center">
+                {current && <span className="absolute inset-0 animate-ping rounded-full bg-blue-500/25" />}
+                <motion.span
+                  initial={false}
                   animate={{
-                    scale: isCurrent ? 1.2 : 1,
-                    boxShadow: isCurrent ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none',
+                    backgroundColor: done ? (stage.stage === 5 ? '#10b981' : '#2563eb') : current ? '#ffffff' : '#f1f5f9',
+                    borderColor: done ? (stage.stage === 5 ? '#10b981' : '#2563eb') : current ? '#2563eb' : '#e2e8f0',
+                    scale: current ? 1.08 : 1,
                   }}
-                  className={`h-16 w-16 rounded-full flex items-center justify-center font-semibold text-white mb-2 transition-all ${
-                    isCompleted || isCurrent
-                      ? `bg-gradient-to-br ${STAGE_COLORS[stage.number]}`
-                      : 'bg-slate-300'
-                  }`}
+                  transition={{ duration: 0.3 }}
+                  className="relative flex h-7 w-7 items-center justify-center rounded-full border-2"
                 >
-                  {isCompleted ? (
-                    <CheckCircle2 className="h-6 w-6" />
-                  ) : isCurrent ? (
-                    <Clock className="h-6 w-6 animate-spin" />
-                  ) : (
-                    <span>{stage.number}</span>
-                  )}
-                </motion.div>
-
-                <div className="text-center">
-                  <p className="text-xs font-semibold text-slate-900">{stage.label}</p>
-                  <p className="text-[10px] text-slate-500">{stage.description}</p>
+                  <AnimatePresence mode="wait" initial={false}>
+                    {done ? (
+                      <motion.span key="check" initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 600, damping: 22 }}>
+                        <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+                      </motion.span>
+                    ) : (
+                      <motion.span key="num" className={`text-[11px] font-semibold ${current ? 'text-blue-600' : 'text-slate-400'}`}>
+                        {stage.stage}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.span>
+              </span>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className={`text-sm ${done || current ? 'font-semibold text-slate-900' : 'font-medium text-slate-400'}`}>{stage.label}</p>
+                  {stamp && (done || current) && <span className="tabular shrink-0 text-xs text-slate-400">{stamp}</span>}
                 </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
+                <p className={`mt-0.5 text-[13px] ${done || current ? 'text-slate-500' : 'text-slate-400'}`}>{stage.hint}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
 
-      {/* Кнопка ускорения */}
-      {currentStage < 5 && (
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleAdvanceStage}
-          className="w-full rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 flex items-center justify-center gap-2 transition-all shadow-lg"
-        >
-          <Zap className="h-5 w-5" />
-          ⚡ Ускорить обработку (Демо-симуляция)
-        </motion.button>
-      )}
-
-      {/* Статус */}
-      <div className="text-center">
-        <p className="text-sm text-slate-600">
-          <span className="font-semibold">{STAGES[currentStage - 1]?.label}</span>
-          {currentStage < 5 && (
-            <span className="text-amber-600 ml-2">⏳ Обработка...</span>
-          )}
-          {currentStage === 5 && (
-            <span className="text-emerald-600 ml-2">✓ Готово!</span>
-          )}
-        </p>
-        {request.updatedAt && (
-          <p className="text-xs text-slate-500 mt-1">Обновлено: {request.updatedAt}</p>
+      <AnimatePresence initial={false}>
+        {currentStage < 5 && (
+          <motion.button
+            key="advance"
+            type="button"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            onClick={handleAdvanceStage}
+            className="pressable mt-4 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-[13px] font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          >
+            <FastForward className="h-4 w-4" />
+            Демо: следующий этап
+          </motion.button>
         )}
-      </div>
+      </AnimatePresence>
 
-      {/* QR-код для проверки подлинности */}
-      {request.verificationQrCode && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center"
-        >
-          <p className="text-xs font-semibold text-emerald-900 mb-2">Код проверки подлинности:</p>
-          <p className="font-mono text-sm text-emerald-700 break-all">{request.verificationQrCode}</p>
-          <p className="text-[10px] text-emerald-600 mt-1">
-            Код действителен на портале проверки МГИМО
-          </p>
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {request.verificationQrCode && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 flex items-start gap-3 rounded-xl bg-emerald-50 p-3.5 ring-1 ring-inset ring-emerald-200"
+          >
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-emerald-900">Код проверки подлинности</p>
+              <p className="tabular mt-0.5 break-all text-sm font-semibold tracking-wide text-emerald-700">{request.verificationQrCode}</p>
+              <p className="mt-1 text-xs text-emerald-700/70">Проверяется на verify.mgimo.ru</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

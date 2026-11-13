@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import { BookX } from 'lucide-react';
 import type { GradeItem, UserProfile } from '../types';
 import { InteractiveGradeCard } from './InteractiveGradeCard';
 import { AIGradePrediction } from './AIGradePrediction';
+import { Chips, CountUp, EmptyState, PageHeader } from './ui/primitives';
 
 type GradesViewProps = {
   user: UserProfile;
@@ -16,126 +18,59 @@ const FILTERS: GradeFilter[] = ['Все', 'Экзамен', 'Зачет'];
 export default function GradesView({ user, grades }: GradesViewProps) {
   const [filter, setFilter] = useState<GradeFilter>('Все');
   const visible = grades.filter((item) => filter === 'Все' || item.examType === filter);
-
-  // Проверяем, есть ли дисциплины в красной зоне
   const hasAtRiskGrades = grades.some((g) => g.status === 'Требует внимания');
+
+  const stats = [
+    { label: 'Средний балл', value: user.gpa, decimals: 2, accent: 'text-amber-300' },
+    { label: 'Рейтинг БРС', value: user.brsAverage, decimals: 0, accent: 'text-white' },
+    { label: 'Место на курсе', value: user.ratingPlace, decimals: 0, accent: 'text-white' },
+  ];
 
   return (
     <div className="pb-24">
-      <header className="bg-slate-900 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-b-3xl px-4 pb-6 pt-6 shadow-md">
-        <h1 className="font-semibold tracking-tight text-xl">Зачётка и БРС</h1>
-        <p className="mt-1 text-xs text-slate-300">
-          {user.course} курс · {user.group}
-        </p>
-
-        {/* Аналитика */}
-        <div className="mt-4 grid grid-cols-3 divide-x divide-white/10 rounded-2xl border border-white/10 bg-white/5">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="px-2 py-3 text-center"
-          >
-            <motion.p
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 0.6 }}
-              className="font-semibold tracking-tight text-xl text-amber-400"
-            >
-              {user.gpa.toFixed(2)}
-            </motion.p>
-            <p className="mt-1 text-[11px] text-slate-300">Средний балл</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="px-2 py-3 text-center"
-          >
-            <motion.p
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="font-semibold tracking-tight text-xl"
-            >
-              {user.brsAverage}
-            </motion.p>
-            <p className="mt-1 text-[11px] text-slate-300">Рейтинг БРС</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="px-2 py-3 text-center"
-          >
-            <motion.p
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="font-semibold tracking-tight text-xl"
-            >
-              {user.ratingPlace}
-            </motion.p>
-            <p className="mt-1 text-[11px] text-slate-300">Место на курсе</p>
-          </motion.div>
+      <PageHeader title="Зачётка и БРС" subtitle={`${user.course} курс, группа ${user.group}`}>
+        <div className="mt-4 grid grid-cols-3 rounded-2xl bg-white/[0.06] ring-1 ring-inset ring-white/10">
+          {stats.map((stat, index) => (
+            <div key={stat.label} className={`px-2 py-3.5 text-center ${index > 0 ? 'border-l border-white/10' : ''}`}>
+              <CountUp value={stat.value} decimals={stat.decimals} prefix={stat.label === 'Место на курсе' ? '№ ' : ''} className={`text-2xl font-semibold tracking-tight ${stat.accent}`} />
+              <p className="mt-0.5 text-[11px] text-slate-400">{stat.label}</p>
+            </div>
+          ))}
         </div>
-      </header>
+      </PageHeader>
 
-      <div className="space-y-4 px-4 py-4">
-        {/* AI Prediction */}
+      <div className="space-y-4 px-4 pt-4">
         <AIGradePrediction user={user} grades={grades} />
 
-        {/* Фильтры */}
-        <motion.div layout className="flex gap-2">
-          {FILTERS.map((item) => {
-            const selected = item === filter;
-            return (
-              <motion.button
-                key={item}
-                whileTap={{ scale: 0.95 }}
-                type="button"
-                onClick={() => setFilter(item)}
-                className={`transition-all rounded-xl px-3.5 py-2 text-sm font-medium ${
-                  selected
-                    ? 'bg-slate-900 text-white shadow-md'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                {item}
-              </motion.button>
-            );
-          })}
-        </motion.div>
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">Дисциплины</h2>
+        </div>
+        <Chips
+          id="grade-filter"
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((item) => ({
+            value: item,
+            label: item === 'Зачет' ? 'Зачёт' : item,
+            count: item === 'Все' ? grades.length : grades.filter((g) => g.examType === item).length,
+          }))}
+        />
 
-        {/* Карточки оценок */}
-        <AnimatePresence mode="wait">
-          {visible.length === 0 ? (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100"
-            >
-              <p className="text-sm text-slate-500">По этому фильтру дисциплин нет.</p>
-            </motion.div>
-          ) : (
-            <motion.div
-              key={filter}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ staggerChildren: 0.05 }}
-              className="space-y-3"
-            >
-              {visible.map((grade, index) => (
-                <InteractiveGradeCard
-                  key={grade.id}
-                  item={grade}
-                  index={index}
-                  isAtRisk={hasAtRiskGrades}
-                />
-              ))}
-            </motion.div>
-          )}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={filter}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="space-y-2.5"
+          >
+            {visible.length === 0 ? (
+              <EmptyState icon={BookX} title="По этому фильтру дисциплин нет" />
+            ) : (
+              visible.map((grade, index) => <InteractiveGradeCard key={grade.id} item={grade} index={index} isAtRisk={hasAtRiskGrades} />)
+            )}
+          </motion.div>
         </AnimatePresence>
       </div>
     </div>

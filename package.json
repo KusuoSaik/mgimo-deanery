@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource-variable/onest": "^5.3.1",
     "@tailwindcss/vite": "^4.3.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

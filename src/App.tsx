@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChartColumn, ClipboardList, House, Sparkles, UserRound } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
+import { Avatar } from './components/ui/primitives';
+import { firstName } from './components/ui/tokens';
 import AiAssistantView from './components/AiAssistantView';
 import DashboardView from './components/DashboardView';
 import GradesView from './components/GradesView';
@@ -23,32 +25,75 @@ const TABS: { id: TabType; label: string; icon: typeof House }[] = [
   { id: 'profile', label: 'Профиль', icon: UserRound },
 ];
 
-function BottomNav({ activeTab, onChange }: { activeTab: TabType; onChange: (tab: TabType) => void }) {
+function BottomNav({ activeTab, onChange, badges }: { activeTab: TabType; onChange: (tab: TabType) => void; badges: Partial<Record<TabType, number>> }) {
   return (
-    <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 border-t border-slate-200 bg-white/95 backdrop-blur">
-      <div className="grid grid-cols-6 pb-[env(safe-area-inset-bottom)]">
+    <motion.nav
+      aria-label="Разделы"
+      initial={{ y: 90 }}
+      animate={{ y: 0 }}
+      exit={{ y: 90 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 36 }}
+      className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200/70 bg-white/85 backdrop-blur-xl backdrop-saturate-150"
+    >
+      <div className="grid grid-cols-6 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = tab.id === activeTab;
+          const badge = badges[tab.id] ?? 0;
           return (
             <button
               key={tab.id}
               type="button"
               onClick={() => onChange(tab.id)}
               aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center gap-1 px-0.5 py-2 text-[10px] font-medium leading-tight ${
-                active ? 'text-blue-600' : 'text-slate-400'
+              className={`group relative flex flex-col items-center gap-1 rounded-xl px-0.5 py-1 text-[10.5px] font-medium leading-tight transition-colors duration-200 ${
+                active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 2} aria-hidden="true" />
+              <span className="relative flex h-8 w-12 items-center justify-center">
+                {active && (
+                  <motion.span
+                    layoutId="nav-pill"
+                    transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                    className="absolute inset-0 rounded-full bg-blue-600/10"
+                  />
+                )}
+                <motion.span
+                  animate={{ y: active ? -1 : 0, scale: active ? 1.06 : 1 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  className="relative"
+                >
+                  <Icon className="h-[21px] w-[21px]" strokeWidth={active ? 2.3 : 1.9} aria-hidden="true" />
+                </motion.span>
+                <AnimatePresence>
+                  {badge > 0 && (
+                    <motion.span
+                      key="badge"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      transition={{ type: 'spring', stiffness: 600, damping: 26 }}
+                      className="tabular absolute right-1.5 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white ring-2 ring-white"
+                    >
+                      {badge}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </span>
               {tab.label}
             </button>
           );
         })}
       </div>
-    </nav>
+    </motion.nav>
   );
 }
+
+const pageVariants = {
+  enter: (direction: number) => ({ opacity: 0, x: direction * 28 }),
+  center: { opacity: 1, x: 0 },
+  exit: (direction: number) => ({ opacity: 0, x: direction * -20 }),
+};
 
 function loadStored<T>(key: string, fallback: T): T {
   try {
@@ -66,7 +111,19 @@ function accountToUserProfile(account: StoredAccount): UserProfile {
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => isAuthenticated());
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [activeTab, setActiveTabState] = useState<TabType>('dashboard');
+  const [direction, setDirection] = useState(1);
+  const activeTabRef = useRef<TabType>('dashboard');
+
+  function setActiveTab(tab: TabType) {
+    const from = TABS.findIndex((item) => item.id === activeTabRef.current);
+    const to = TABS.findIndex((item) => item.id === tab);
+    if (from === to) return;
+    setDirection(to > from ? 1 : -1);
+    activeTabRef.current = tab;
+    setActiveTabState(tab);
+    window.scrollTo({ top: 0 });
+  }
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<StoredAccount | null>(() => getCurrentUser());
   const [requests, setRequests] = useState<RequestItem[]>(() => {
@@ -251,7 +308,7 @@ export default function App() {
     setNotifications((current) => [
       {
         id: `nt-${crypto.randomUUID()}`,
-        title: '📬 Сообщение от деканата',
+        title: 'Сообщение от деканата',
         message,
         date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date()),
         type: 'warning',
@@ -263,99 +320,122 @@ export default function App() {
 
   const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
 
+  const unreadCount = notifications.filter((item) => !item.isRead).length;
+
   return (
-    <div className="min-h-screen bg-slate-200">
-      <div className="max-w-md mx-auto min-h-screen bg-slate-50 shadow-2xl relative">
-        {isLoggedIn && currentAccount && userProfile ? (
-          <>
-            {/* Admin Mode Toggle */}
-            <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500">{userProfile.name}</p>
-                <p className="text-[10px] text-slate-400">{isAdminMode ? '🏛️ Режим администратора' : '👨‍🎓 Режим студента'}</p>
-              </div>
-              <AdminModeToggle isAdminMode={isAdminMode} onToggle={setIsAdminMode} />
-            </div>
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-dvh bg-slate-200">
+        <div className="relative mx-auto min-h-dvh max-w-md bg-slate-50 shadow-2xl shadow-slate-900/20">
+          <AnimatePresence mode="wait" initial={false}>
+            {isLoggedIn && currentAccount && userProfile ? (
+              <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }}>
+                <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-slate-900 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] text-white">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAdminMode(false);
+                      setActiveTab('profile');
+                    }}
+                    className="flex min-w-0 items-center gap-2.5 rounded-xl text-left"
+                  >
+                    <Avatar src={userProfile.avatarUrl} name={userProfile.name} size={32} className="rounded-[10px]" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium leading-tight">{firstName(userProfile.name)}</span>
+                      <span className="block truncate text-[11px] leading-tight text-slate-400">
+                        {isAdminMode ? 'Пульт деканата' : `Группа ${userProfile.group}`}
+                      </span>
+                    </span>
+                  </button>
+                  <AdminModeToggle isAdminMode={isAdminMode} onToggle={setIsAdminMode} />
+                </div>
 
-            {/* Content */}
-            <AnimatePresence mode="wait">
-              {isAdminMode ? (
-                <motion.div
-                  key="admin"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="px-4 pt-4"
-                >
-                  <AdminDashboard
-                    requests={requests}
-                    students={[userProfile]}
-                    onApproveRequest={handleApproveRequest}
-                    onRejectRequest={handleRejectRequest}
-                    onSendNotification={handleSendNotification}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="student"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  {activeTab === 'dashboard' && (
-                    <DashboardView
-                      user={userProfile}
-                      schedule={schedule}
-                      notifications={notifications}
-                      requests={requests}
-                      onNavigate={setActiveTab}
-                      onMarkNotificationRead={handleMarkNotificationRead}
-                      onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
-                      onDemoCompleteRequest={handleDemoCompleteRequest}
-                    />
+                <AnimatePresence mode="wait" initial={false} custom={direction}>
+                  {isAdminMode ? (
+                    <motion.div
+                      key="admin"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <AdminDashboard
+                        requests={requests}
+                        students={[userProfile]}
+                        onApproveRequest={handleApproveRequest}
+                        onRejectRequest={handleRejectRequest}
+                        onSendNotification={handleSendNotification}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key={activeTab}
+                      custom={direction}
+                      variants={pageVariants}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      transition={{ x: { type: 'spring', stiffness: 420, damping: 40 }, opacity: { duration: 0.18 } }}
+                    >
+                      {activeTab === 'dashboard' && (
+                        <DashboardView
+                          user={userProfile}
+                          schedule={schedule}
+                          notifications={notifications}
+                          requests={requests}
+                          onNavigate={setActiveTab}
+                          onMarkNotificationRead={handleMarkNotificationRead}
+                          onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+                          onDemoCompleteRequest={handleDemoCompleteRequest}
+                        />
+                      )}
+                      {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
+                      {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
+                      {activeTab === 'requests' && (
+                        <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />
+                      )}
+                      {activeTab === 'ai' && (
+                        <AiAssistantView
+                          user={userProfile}
+                          grades={grades}
+                          schedule={schedule}
+                          requests={requests}
+                          onAddRequest={handleAddRequest}
+                        />
+                      )}
+                      {activeTab === 'profile' && (
+                        <ProfileView
+                          user={userProfile}
+                          account={currentAccount}
+                          onLogout={handleLogout}
+                          onSwitchAccount={handleSwitchAccount}
+                          onResetDemoData={handleResetDemoData}
+                        />
+                      )}
+                    </motion.div>
                   )}
-                  {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
-                  {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
-                  {activeTab === 'requests' && (
-                    <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />
-                  )}
-                  {activeTab === 'ai' && (
-                    <AiAssistantView
-                      user={userProfile}
-                      grades={grades}
-                      schedule={schedule}
-                      requests={requests}
-                      onAddRequest={handleAddRequest}
-                    />
-                  )}
-                  {activeTab === 'profile' && (
-                    <ProfileView
-                      user={userProfile}
-                      account={currentAccount}
-                      onLogout={handleLogout}
-                      onSwitchAccount={handleSwitchAccount}
-                      onResetDemoData={handleResetDemoData}
-                    />
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </AnimatePresence>
 
-            {!isAdminMode && <BottomNav activeTab={activeTab} onChange={setActiveTab} />}
-          </>
-        ) : (
-          <LoginScreen
-            onLoginSuccess={() => {
-              const user = getCurrentUser();
-              if (user) {
-                setCurrentAccount(user);
-                setIsLoggedIn(true);
-                setActiveTab('dashboard');
-              }
-            }}
-          />
-        )}
+                <AnimatePresence>
+                  {!isAdminMode && <BottomNav key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }} />}
+                </AnimatePresence>
+              </motion.div>
+            ) : (
+              <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.35 }}>
+                <LoginScreen
+                  onLoginSuccess={() => {
+                    const user = getCurrentUser();
+                    if (user) {
+                      setCurrentAccount(user);
+                      setIsLoggedIn(true);
+                      setActiveTab('dashboard');
+                    }
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+    </MotionConfig>
   );
 }

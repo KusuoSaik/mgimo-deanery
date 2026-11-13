@@ -1,21 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowRightLeft, ChevronRight, Eye, EyeOff, LogOut, RotateCcw, ShieldCheck, Smartphone } from 'lucide-react';
 import type { UserProfile } from '../types';
 import type { StoredAccount } from '../auth/types';
-import {
-  ShieldCheck,
-  Eye,
-  EyeOff,
-  QrCode,
-  Smartphone,
-  LogOut,
-  RotateCcw,
-  Lock,
-  GraduationCap,
-  Bot,
-  Clock,
-  ArrowRightLeft,
-} from 'lucide-react';
 import { getAllAccounts } from '../auth/authService';
+import { Avatar, CountUp, PageHeader } from './ui/primitives';
+import { Guilloche } from './ui/Guilloche';
+import { PseudoQr } from './ui/PseudoQr';
 
 export interface ProfileViewProps {
   user: UserProfile;
@@ -25,262 +16,269 @@ export interface ProfileViewProps {
   onResetDemoData: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogout, onSwitchAccount, onResetDemoData }) => {
-  const [privacyMode, setPrivacyMode] = useState<boolean>(true);
-  const [qrCounter, setQrCounter] = useState<number>(60);
-  const [qrToken, setQrToken] = useState<string>('MGIMO-PASS-8841');
-  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
-  const allAccounts = getAllAccounts();
-  const otherAccounts = allAccounts.filter(acc => acc.id !== account.id);
+const QR_PERIOD = 60;
 
-  // Таймер ротации QR-кода турникета (каждые 60 секунд)
+function TimerRing({ value }: { value: number }) {
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 -rotate-90" aria-hidden="true">
+      <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" className="stroke-white/15" />
+      <circle
+        cx="12"
+        cy="12"
+        r={r}
+        fill="none"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        className="stroke-amber-400 transition-[stroke-dashoffset] duration-1000 ease-linear"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - value / QR_PERIOD)}
+      />
+    </svg>
+  );
+}
+
+export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogout, onSwitchAccount, onResetDemoData }) => {
+  const [privacyMode, setPrivacyMode] = useState(true);
+  const [qrCounter, setQrCounter] = useState(QR_PERIOD);
+  const [qrToken, setQrToken] = useState('MGIMO-PASS-8841');
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const otherAccounts = getAllAccounts().filter((acc) => acc.id !== account.id);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setQrCounter((prev) => {
         if (prev <= 1) {
           setQrToken(`MGIMO-PASS-${Math.floor(1000 + Math.random() * 9000)}`);
-          return 60;
+          return QR_PERIOD;
         }
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, []);
 
-  // Маскирование персональных данных в соответствии с Privacy Mode
-  const maskPassport = (value: string) => {
-    if (!privacyMode) return value;
-    const clean = value.replace(/\s+/g, '');
-    if (clean.length < 5) return '45** *** 892';
-    return `${clean.slice(0, 2)}** *** ${clean.slice(-3)}`;
-  };
-
-  const maskSnils = (value: string) => {
-    if (!privacyMode) return value;
-    return '***-***-*** 84';
-  };
-
-  const maskPhone = (value: string) => {
-    if (!privacyMode) return value;
-    return '+7 (***) ***-**-94';
-  };
+  const personal = [
+    { label: 'Паспорт РФ', shown: user.passport, hidden: (() => { const c = user.passport.replace(/\s+/g, ''); return c.length < 5 ? '•• ••••••' : `${c.slice(0, 2)}•• •••${c.slice(-3)}`; })() },
+    { label: 'СНИЛС', shown: user.snils, hidden: `•••-•••-••• ${user.snils.slice(-2)}` },
+    { label: 'Телефон', shown: user.phone, hidden: `+7 (•••) •••-••-${user.phone.slice(-2)}` },
+    { label: 'Почта', shown: user.email, hidden: user.email },
+  ];
 
   return (
     <div className="pb-24">
-      <header className="bg-slate-900 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-b-3xl px-4 pb-5 pt-6 shadow-md">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-semibold tracking-tight text-xl">Профиль студента</h1>
-            <p className="mt-1 text-xs text-slate-300">
-              {user.course} курс · {user.group}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPrivacyMode(!privacyMode)}
-            aria-label={privacyMode ? 'Показать персональные данные' : 'Скрыть персональные данные'}
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
-              privacyMode
-                ? 'border-blue-500/40 bg-blue-600/20 text-blue-400'
-                : 'border-amber-500/40 bg-amber-500/20 text-amber-400'
-            }`}
-          >
-            {privacyMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            <span>{privacyMode ? 'Скрыто' : 'Показано'}</span>
-          </button>
-        </div>
-      </header>
+      <PageHeader title="Профиль" subtitle={user.faculty} className="pb-16" />
 
-      <div className="space-y-4 px-4 py-4">
+      <div className="relative -mt-12 space-y-5 px-4">
+        <motion.section
+          initial={{ opacity: 0, y: 18, rotateX: 8 }}
+          animate={{ opacity: 1, y: 0, rotateX: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          style={{ transformPerspective: 900 }}
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-5 text-white shadow-[0_24px_48px_-20px_rgb(15_23_42/0.6)] ring-1 ring-white/10"
+        >
+          <Guilloche className="absolute -right-24 -top-24 h-80 w-80 text-amber-300/[0.16]" />
+          <Guilloche className="absolute -bottom-40 -left-32 h-80 w-80 text-blue-300/[0.08]" />
 
-        <section className="relative overflow-hidden rounded-2xl border border-blue-500/40 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 p-5 shadow-md">
-          <div className="pointer-events-none absolute right-0 top-0 h-36 w-36 rounded-full bg-blue-600/10 blur-2xl" />
-
-          <div className="mb-4 flex items-start justify-between border-b border-slate-700/60 pb-3">
+          <div className="relative flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
-                <GraduationCap className="h-4 w-4" />
-                <span>МГИМО МИД России</span>
-              </div>
-              <h2 className="mt-0.5 text-sm font-bold text-white">Цифровой студенческий билет</h2>
+              <p className="text-[13px] font-semibold text-amber-300">МГИМО МИД России</p>
+              <p className="mt-0.5 text-xs text-slate-400">Цифровой студенческий билет</p>
             </div>
-            <span className="rounded border border-blue-500/30 bg-blue-900/60 px-2 py-0.5 font-mono text-[10px] text-blue-300">
-              {user.studentId}
-            </span>
+            <span className="tabular rounded-lg bg-white/[0.08] px-2 py-1 text-xs text-slate-200 ring-1 ring-inset ring-white/10">№ {user.studentId}</span>
           </div>
 
-          <div className="mb-5 flex items-center gap-4">
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              className="h-16 w-16 shrink-0 rounded-2xl border-2 border-amber-500/60 object-cover shadow-md"
-            />
+          <div className="relative mt-5 flex items-center gap-4">
+            <Avatar src={user.avatarUrl} name={user.name} size={64} className="ring-2 ring-amber-400/40" />
             <div className="min-w-0">
-              <h3 className="truncate text-base font-bold text-white">{user.name}</h3>
-              <p className="truncate text-xs text-slate-300">{user.faculty}</p>
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
-                <span>{user.course} курс</span>
-                <span>•</span>
-                <span className="font-mono">Группа {user.group}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-            <div className="relative mb-2 rounded-xl bg-white p-2.5 shadow-inner">
-              <QrCode className="h-28 w-28 text-slate-950" aria-hidden="true" />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
-                  МГИМО
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
-              <Clock className="h-3.5 w-3.5 text-amber-500" />
-              <span>Обновление через {qrCounter} сек</span>
-            </div>
-            <span className="mt-0.5 text-[10px] text-slate-500">
-              Токен: {qrToken} · Защита от передачи скриншота
-            </span>
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-800/80 pt-3 text-center">
-            <div className="rounded-xl border border-slate-700/30 bg-slate-800/40 p-2">
-              <span className="block text-[10px] text-slate-400">БРС Средний</span>
-              <span className="text-sm font-bold text-emerald-400">{user.brsAverage}</span>
-            </div>
-            <div className="rounded-xl border border-slate-700/30 bg-slate-800/40 p-2">
-              <span className="block text-[10px] text-slate-400">GPA</span>
-              <span className="text-sm font-bold text-blue-400">{user.gpa.toFixed(2)}</span>
-            </div>
-            <div className="rounded-xl border border-slate-700/30 bg-slate-800/40 p-2">
-              <span className="block text-[10px] text-slate-400">Рейтинг</span>
-              <span className="text-sm font-bold text-amber-500">#{user.ratingPlace}</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-3 rounded-2xl border border-slate-700/60 bg-slate-800/70 p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
-              <Lock className="h-3.5 w-3.5 text-blue-400" />
-              Персональные данные (152-ФЗ)
-            </h3>
-          </div>
-
-          <dl className="space-y-2 text-xs">
-            <div className="flex justify-between border-b border-slate-700/40 py-1.5">
-              <dt className="text-slate-400">Паспорт РФ</dt>
-              <dd className="font-mono text-slate-200">{maskPassport(user.passport)}</dd>
-            </div>
-            <div className="flex justify-between border-b border-slate-700/40 py-1.5">
-              <dt className="text-slate-400">СНИЛС</dt>
-              <dd className="font-mono text-slate-200">{maskSnils(user.snils)}</dd>
-            </div>
-            <div className="flex justify-between border-b border-slate-700/40 py-1.5">
-              <dt className="text-slate-400">Телефон</dt>
-              <dd className="font-mono text-slate-200">{maskPhone(user.phone)}</dd>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <dt className="text-slate-400">Корпоративная почта</dt>
-              <dd className="font-mono text-slate-200">{user.email}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="space-y-3 rounded-2xl border border-indigo-900/60 bg-indigo-950/40 p-4">
-          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white">
-            <Bot className="h-4 w-4 text-amber-500" />
-            Безопасность и согласие на обработку ПДн
-          </h3>
-
-          <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
-            <div className="mt-0.5 shrink-0 rounded-lg bg-emerald-500/10 p-1.5 text-emerald-400">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-            <div className="text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-200">PII Masking Gateway</span>
-                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
-                  ACTIVE
-                </span>
-              </div>
-              <p className="mt-1 leading-relaxed text-slate-400">
-                Обезличивание включено: при обращении к ИИ-ассистенту деканата ФИО, паспорт и СНИЛС заменяются на токены
-                внутри контура МГИМО (152-ФЗ).
+              <h2 className="text-[17px] font-semibold leading-snug tracking-tight">{user.name}</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                {user.course} курс, группа {user.group}
+                {user.role && user.role !== 'Студент' ? `, ${user.role.toLowerCase()}` : ''}
               </p>
             </div>
           </div>
 
-          <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-semibold uppercase text-slate-400">Активные сессии</span>
-            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-xs">
-              <div className="flex items-center gap-2">
-                <Smartphone className="h-4 w-4 text-blue-400" />
-                <div>
-                  <p className="font-medium text-slate-200">iPhone 15 Pro · Мобильный PWA</p>
-                  <p className="text-[10px] text-slate-500">Москва, пр-т Вернадского, 76 · Онлайн</p>
-                </div>
-              </div>
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <div className="relative mt-5 flex items-center gap-4 rounded-2xl bg-white/[0.06] p-3 ring-1 ring-inset ring-white/10">
+            <div className="relative h-[104px] w-[104px] shrink-0 overflow-hidden rounded-xl bg-white p-1.5">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={qrToken}
+                  initial={{ opacity: 0, scale: 0.92, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, scale: 1.04 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  <PseudoQr token={qrToken} className="h-full w-full" />
+                </motion.div>
+              </AnimatePresence>
             </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Пропуск в корпус</p>
+              <p className="mt-1 flex items-center gap-2 text-xs text-slate-300">
+                <TimerRing value={qrCounter} />
+                <span className="tabular">Новый код через {qrCounter} с</span>
+              </p>
+              <p className="tabular mt-2 truncate text-[11px] text-slate-500">{qrToken}</p>
+            </div>
+          </div>
+        </motion.section>
+
+        <section className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'БРС', value: user.brsAverage, decimals: 0, tone: 'text-slate-900' },
+            { label: 'Средний балл', value: user.gpa, decimals: 2, tone: 'text-amber-600' },
+            { label: 'Место', value: user.ratingPlace, decimals: 0, tone: 'text-slate-900', prefix: '№ ' },
+          ].map((stat) => (
+            <div key={stat.label} className="card px-2 py-3 text-center">
+              <CountUp value={stat.value} decimals={stat.decimals} prefix={stat.prefix} className={`text-xl font-semibold tracking-tight ${stat.tone}`} />
+              <p className="mt-0.5 text-[11px] text-slate-500">{stat.label}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4">
+            <div>
+              <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">Персональные данные</h3>
+              <p className="text-xs text-slate-500">Скрыты по умолчанию, 152-ФЗ</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPrivacyMode((value) => !value)}
+              aria-pressed={!privacyMode}
+              className="pressable flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
+            >
+              {privacyMode ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              {privacyMode ? 'Показать' : 'Скрыть'}
+            </button>
+          </div>
+          <dl className="divide-y divide-slate-100 px-4">
+            {personal.map((row) => {
+              const value = privacyMode ? row.hidden : row.shown;
+              return (
+                <div key={row.label} className="flex items-center justify-between gap-4 py-3">
+                  <dt className="text-[13px] text-slate-500">{row.label}</dt>
+                  <dd className="tabular relative min-w-0 overflow-hidden text-right text-sm font-medium text-slate-900">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span
+                        key={value}
+                        initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
+                        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, y: -8, filter: 'blur(3px)' }}
+                        transition={{ duration: 0.22 }}
+                        className="block truncate"
+                      >
+                        {value}
+                      </motion.span>
+                    </AnimatePresence>
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </section>
+
+        <section className="card divide-y divide-slate-100 overflow-hidden">
+          <div className="flex items-start gap-3 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <ShieldCheck className="h-[18px] w-[18px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-slate-900">Обезличивание для ИИ</p>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  включено
+                </span>
+              </div>
+              <p className="mt-1 text-[13px] leading-relaxed text-slate-500">
+                ФИО, паспорт и СНИЛС заменяются токенами, прежде чем запрос уйдёт ассистенту.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Smartphone className="h-[18px] w-[18px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-900">iPhone 15 Pro, это устройство</p>
+              <p className="mt-0.5 truncate text-[13px] text-slate-500">Москва, пр-т Вернадского, 76</p>
+            </div>
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
           </div>
         </section>
 
-        <div className="space-y-2">
+        <section className="card overflow-hidden">
           {otherAccounts.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-900/30 bg-indigo-950/40 px-4 py-3 text-xs font-medium text-indigo-400 transition-all hover:border-indigo-700/50 hover:bg-indigo-900/40"
-            >
-              <ArrowRightLeft className="h-4 w-4" />
-              Переключить аккаунт
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAccountSwitcher((value) => !value)}
+                aria-expanded={showAccountSwitcher}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50"
+              >
+                <ArrowRightLeft className="h-[18px] w-[18px] text-slate-400" />
+                <span className="flex-1 text-sm font-medium text-slate-900">Сменить аккаунт</span>
+                <motion.span animate={{ rotate: showAccountSwitcher ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                  <ChevronRight className="h-4 w-4 text-slate-300" />
+                </motion.span>
+              </button>
+              <AnimatePresence initial={false}>
+                {showAccountSwitcher && (
+                  <motion.ul
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                    className="overflow-hidden bg-slate-50"
+                  >
+                    {otherAccounts.map((acc) => (
+                      <li key={acc.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSwitchAccount(acc);
+                            setShowAccountSwitcher(false);
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-slate-100"
+                        >
+                          <Avatar src={acc.profile.avatarUrl} name={acc.profile.name} size={32} className="rounded-[10px]" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-slate-900">{acc.profile.name}</span>
+                            <span className="block text-xs text-slate-500">
+                              {acc.profile.course} курс, {acc.profile.group}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
+            </>
           )}
-
-          {showAccountSwitcher && otherAccounts.length > 0 && (
-            <div className="rounded-xl border border-slate-700/60 bg-slate-800/70 p-3 space-y-2">
-              <p className="text-[11px] font-semibold uppercase text-slate-400 px-2">Другие аккаунты</p>
-              {otherAccounts.map((acc) => (
-                <button
-                  key={acc.id}
-                  type="button"
-                  onClick={() => {
-                    onSwitchAccount(acc);
-                    setShowAccountSwitcher(false);
-                  }}
-                  className="w-full rounded-lg border border-slate-700/30 bg-slate-900/60 hover:bg-slate-700/60 px-3 py-2 text-left transition-all text-xs"
-                >
-                  <div className="font-medium text-slate-200">{acc.profile.name}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    {acc.profile.course} курс · {acc.profile.group}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
           <button
             type="button"
             onClick={onResetDemoData}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-900/30 bg-slate-800/80 px-4 py-3 text-xs font-medium text-amber-400 transition-all hover:border-amber-700/50 hover:bg-amber-950/40"
+            className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3.5 text-left transition-colors first:border-t-0 hover:bg-slate-50"
           >
-            <RotateCcw className="h-4 w-4" />
-            Сбросить демо-данные
+            <RotateCcw className="h-[18px] w-[18px] text-slate-400" />
+            <span className="flex-1 text-sm font-medium text-slate-900">Сбросить демо-данные</span>
           </button>
-
           <button
             type="button"
             onClick={onLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-900/30 bg-slate-800/80 px-4 py-3 text-xs font-medium text-rose-400 transition-all hover:border-rose-700/50 hover:bg-rose-950/40"
+            className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3.5 text-left transition-colors hover:bg-rose-50"
           >
-            <LogOut className="h-4 w-4" />
-            Выйти из аккаунта
+            <LogOut className="h-[18px] w-[18px] text-rose-500" />
+            <span className="flex-1 text-sm font-medium text-rose-600">Выйти из аккаунта</span>
           </button>
-        </div>
+        </section>
       </div>
     </div>
   );

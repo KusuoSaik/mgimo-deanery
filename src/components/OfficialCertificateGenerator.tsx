@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Download, Printer } from 'lucide-react';
-import type { UserProfile, RequestItem } from '../types';
+import { Download, Printer, X } from 'lucide-react';
+import type { RequestItem, UserProfile } from '../types';
+import { Segmented } from './ui/primitives';
 
 type CertificateLanguage = 'ru' | 'en';
 
@@ -11,261 +13,225 @@ interface OfficialCertificateGeneratorProps {
   onClose: () => void;
 }
 
-const CERTIFICATE_TEMPLATES = {
+const TEMPLATES = {
   ru: {
-    header: 'Министерство иностранных дел Российской Федерации\nМГИМО МИД России',
-    title: 'СПРАВКА',
+    org: 'Федеральное государственное автономное образовательное учреждение высшего образования',
+    header: 'Московский государственный институт международных отношений (университет) Министерства иностранных дел Российской Федерации',
+    title: 'Справка',
     docNumber: 'Исх. №',
-    date: 'Дата:',
-    content: () => `
-СПРАВКА
-
-Дана настоящая справка {{STUDENT_NAME}}, студенту {{COURSE}}-го курса {{FACULTY}}, группа {{GROUP}}, в том, что он(а) является студентом МГИМО МИД России и обучается по очной форме обучения.
-
-Приказ о зачислении: № {{ENROLLMENT_NUMBER}} от {{ENROLLMENT_DATE}}
-
-Справка выдана для предъявления в {{PURPOSE}}.
-
-Справка действительна {{VALIDITY}} дней с момента выдачи.
-
-Проверить подлинность документа можно на портале МГИМО: https://verify.mgimo.ru
-Код проверки: {{QR_CODE}}
-    `,
-    signature: 'Проректор по учебной работе',
-    stamp: 'ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ',
-    verified: 'Подпись действительна',
+    body: (p: Record<string, string>) => [
+      `Дана ${p.name}, студенту ${p.course} курса (${p.faculty}, группа ${p.group}), в том, что он(а) действительно обучается в МГИМО МИД России по очной форме обучения.`,
+      `Приказ о зачислении № 001 от ${p.enrolled}`,
+      `Справка выдана для предъявления по месту требования и действительна 90 дней с момента выдачи.`,
+    ],
+    signer: 'Проректор по учебной работе',
+    stampTop: 'МГИМО МИД РОССИИ',
+    stampBottom: 'ЭЛЕКТРОННАЯ ПОДПИСЬ',
+    stampCenter: 'Подписано',
+    verify: 'Проверка подлинности: verify.mgimo.ru, код',
   },
   en: {
-    header: 'Ministry of Foreign Affairs of the Russian Federation\nMGIMO University',
-    title: 'CERTIFICATE',
+    org: 'Federal State Autonomous Educational Institution of Higher Education',
+    header: 'Moscow State Institute of International Relations (University) of the Ministry of Foreign Affairs of the Russian Federation',
+    title: 'Certificate',
     docNumber: 'Ref. No.',
-    date: 'Date:',
-    content: () => `
-CERTIFICATE
-
-This is to certify that {{STUDENT_NAME}}, a {{COURSE}}-year student of {{FACULTY}}, group {{GROUP}}, is a student of MGIMO University and is studying on a full-time basis.
-
-Enrollment Order: No. {{ENROLLMENT_NUMBER}} dated {{ENROLLMENT_DATE}}
-
-This certificate is issued for presentation to {{PURPOSE}}.
-
-This certificate is valid for {{VALIDITY}} days from the date of issue.
-
-To verify the authenticity of this document, visit MGIMO portal: https://verify.mgimo.ru
-Verification code: {{QR_CODE}}
-    `,
-    signature: 'Vice Rector for Academic Affairs',
-    stamp: 'DOCUMENT SIGNED WITH ELECTRONIC SIGNATURE',
-    verified: 'Signature is valid',
+    body: (p: Record<string, string>) => [
+      `This is to certify that ${p.name}, a year ${p.course} student (${p.faculty}, group ${p.group}), is enrolled at MGIMO University in a full-time programme.`,
+      `Enrollment order No. 001 dated ${p.enrolled}.`,
+      `This certificate is issued for presentation upon request and is valid for 90 days from the date of issue.`,
+    ],
+    signer: 'Vice-Rector for Academic Affairs',
+    stampTop: 'MGIMO UNIVERSITY',
+    stampBottom: 'ELECTRONIC SIGNATURE',
+    stampCenter: 'Signed',
+    verify: 'Verify at verify.mgimo.ru, code',
   },
 };
 
-const formatDate = (date: Date, locale: CertificateLanguage) => {
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  };
-  return locale === 'ru'
-    ? date.toLocaleDateString('ru-RU', options)
-    : date.toLocaleDateString('en-US', options);
-};
+const formatDate = (date: Date, locale: CertificateLanguage) =>
+  date.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
 
-export const OfficialCertificateGenerator = ({
-  user,
-  request,
-  onClose,
-}: OfficialCertificateGeneratorProps) => {
+function Stamp({ top, bottom, center, date }: { top: string; bottom: string; center: string; date: string }) {
+  return (
+    <svg viewBox="0 0 140 140" className="h-32 w-32 text-blue-700" aria-hidden="true">
+      <defs>
+        <path id="stamp-top" d="M 70 70 m -52 0 a 52 52 0 1 1 104 0" />
+        <path id="stamp-bottom" d="M 70 70 m -52 0 a 52 52 0 0 0 104 0" />
+      </defs>
+      <g fill="none" stroke="currentColor" opacity="0.85">
+        <circle cx="70" cy="70" r="66" strokeWidth="2.5" />
+        <circle cx="70" cy="70" r="60" strokeWidth="0.8" />
+        <circle cx="70" cy="70" r="38" strokeWidth="1.4" />
+      </g>
+      <g fill="currentColor" opacity="0.85" fontFamily="ui-sans-serif, system-ui" fontWeight="700">
+        <text fontSize="10" letterSpacing="2.2">
+          <textPath href="#stamp-top" startOffset="50%" textAnchor="middle">
+            {top}
+          </textPath>
+        </text>
+        <text fontSize="8.5" letterSpacing="1.6">
+          <textPath href="#stamp-bottom" startOffset="50%" textAnchor="middle" dominantBaseline="hanging">
+            {bottom}
+          </textPath>
+        </text>
+        <text x="70" y="68" textAnchor="middle" fontSize="11">
+          {center}
+        </text>
+        <text x="70" y="82" textAnchor="middle" fontSize="7.5" fontWeight="500">
+          {date}
+        </text>
+      </g>
+    </svg>
+  );
+}
+
+export const OfficialCertificateGenerator = ({ user, request, onClose }: OfficialCertificateGeneratorProps) => {
   const [language, setLanguage] = useState<CertificateLanguage>('ru');
-  const template = CERTIFICATE_TEMPLATES[language];
-
+  const t = TEMPLATES[language];
   const now = new Date();
-  const docNumber = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${request.id.slice(-4).toUpperCase()}`;
-  const enrollmentDate = new Date(2022, 8, 1); // 1 сентября 2022
+  const docNumber = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${request.id.slice(-4).toUpperCase()}`;
+  const code = request.verificationQrCode || `MGIMO-${request.id.toUpperCase()}`;
+  const paragraphs = t.body({
+    name: user.name,
+    course: String(user.course),
+    faculty: user.faculty,
+    group: user.group,
+    enrolled: formatDate(new Date(2022, 8, 1), language),
+  });
 
-  let purpose = 'Для предъявления по месту требования';
-  if (language === 'en') {
-    purpose = 'For presentation as requested';
-  }
-
-  const certificateContent = template
-    .content()
-    .replace('{{STUDENT_NAME}}', user.name)
-    .replace('{{COURSE}}', String(user.course))
-    .replace('{{FACULTY}}', user.faculty)
-    .replace('{{GROUP}}', user.group)
-    .replace('{{ENROLLMENT_NUMBER}}', '001')
-    .replace('{{ENROLLMENT_DATE}}', formatDate(enrollmentDate, language))
-    .replace('{{PURPOSE}}', purpose)
-    .replace('{{VALIDITY}}', '90')
-    .replace('{{QR_CODE}}', request.verificationQrCode || 'MGIMO-' + request.id);
-
-  const handlePrint = () => {
-    window.print();
-  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
 
   const handleDownload = () => {
     const element = document.getElementById('certificate-content');
-    if (element) {
-      const html = element.innerHTML;
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Certificate_${user.studentId}_${language}.html`;
-      link.click();
-    }
+    if (!element) return;
+    const html = `<!doctype html><meta charset="utf-8"><title>${t.title}</title><body style="font-family:Georgia,serif;max-width:720px;margin:40px auto">${element.innerHTML}</body>`;
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Certificate_${user.studentId}_${language}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[80] flex justify-center bg-slate-950/70 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Официальный документ"
+    >
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+        className="flex h-full w-full max-w-md flex-col"
       >
-        {/* Toolbar */}
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Официальный документ</h2>
-
-          {/* Переключатель языка */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setLanguage('ru')}
-              className={`flex items-center gap-1 px-3 py-2 rounded-lg font-medium transition-all ${
-                language === 'ru'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span className="text-lg">🇷🇺</span>
-              На русском
-            </button>
-            <button
-              onClick={() => setLanguage('en')}
-              className={`flex items-center gap-1 px-3 py-2 rounded-lg font-medium transition-all ${
-                language === 'en'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span className="text-lg">🇬🇧</span>
-              In English
-            </button>
-          </div>
-        </div>
-
-        {/* Certificate Content */}
-        <div
-          id="certificate-content"
-          className="bg-white p-12 min-h-[1000px] font-serif text-slate-900"
-        >
-          {/* Letterhead */}
-          <div className="text-center border-b-2 border-blue-900 pb-4 mb-8">
-            <p className="text-xs uppercase tracking-widest text-slate-600 mb-2">
-              Федеральное государственное автономное образовательное учреждение
-              <br />
-              высшего образования
-            </p>
-            <h1 className="text-lg font-bold text-blue-900 whitespace-pre-line leading-tight">
-              {template.header}
-            </h1>
-            <div className="flex justify-between items-center mt-6 text-xs text-slate-600">
-              <div>
-                <p>
-                  {template.docNumber} {docNumber}
-                </p>
-              </div>
-              <div>
-                <p>
-                  {template.date} {formatDate(now, language)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Certificate Title */}
-          <h2 className="text-3xl font-bold text-center text-blue-900 mb-8 uppercase tracking-wide">
-            {template.title}
-          </h2>
-
-          {/* Certificate Body */}
-          <div className="whitespace-pre-wrap text-sm leading-relaxed mb-12 text-justify">
-            {certificateContent}
-          </div>
-
-          {/* Signature Block */}
-          <div className="mt-16 flex justify-between">
-            {/* Left signature */}
-            <div className="text-center">
-              <div className="h-20 border-t-2 border-slate-400 mb-2" />
-              <p className="text-xs font-semibold text-slate-800">Подпись</p>
-            </div>
-
-            {/* Blue Stamp */}
-            <motion.div
-              animate={{ rotate: [-2, 2, -2] }}
-              transition={{ duration: 4, repeat: Infinity }}
-              className="flex flex-col items-center justify-center"
-            >
-              <div className="border-4 border-blue-600 rounded-full px-6 py-4 text-center transform -rotate-12">
-                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
-                  {template.stamp}
-                </p>
-                <p className="text-[8px] text-blue-600 mt-1 font-semibold">{template.verified}</p>
-              </div>
-            </motion.div>
-
-            {/* Right signature */}
-            <div className="text-center">
-              <div className="h-20 border-t-2 border-slate-400 mb-2" />
-              <p className="text-xs font-semibold text-slate-800">{template.signature}</p>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-12 pt-8 border-t border-slate-300 text-center text-[10px] text-slate-500">
-            <p>
-              Документ распечатан в соответствии с установленными требованиями МГИМО.
-              <br />
-              Проверка подлинности: https://verify.mgimo.ru | Код: {request.verificationQrCode}
-            </p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex items-center justify-between gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all hover:bg-slate-100"
-          >
-            Закрыть
+        <div className="flex items-center gap-3 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+            <X className="h-4 w-4" />
           </button>
+          <p className="flex-1 text-sm font-medium text-white">Документ</p>
+          <Segmented
+            id="cert-lang"
+            tone="dark"
+            size="sm"
+            className="w-36"
+            value={language}
+            onChange={setLanguage}
+            options={[
+              { value: 'ru', label: 'RU' },
+              { value: 'en', label: 'EN' },
+            ]}
+          />
+        </div>
 
-          <div className="flex gap-2">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handlePrint}
-              className="flex items-center gap-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 text-sm font-medium transition-all"
-            >
-              <Printer className="h-4 w-4" />
-              Печать
-            </motion.button>
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <motion.article
+            key={language}
+            id="certificate-content"
+            initial={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.25 }}
+            className="relative rounded-md bg-[#fdfdfb] px-6 py-8 font-serif text-slate-900 shadow-2xl"
+          >
+            <header className="border-b border-slate-300 pb-4 text-center">
+              <p className="text-[10px] leading-snug text-slate-500">{t.org}</p>
+              <h1 className="mt-2 text-[13px] font-bold leading-snug text-blue-950">{t.header}</h1>
+              <div className="mt-4 flex justify-between font-sans text-[10px] text-slate-500">
+                <span className="tabular">
+                  {t.docNumber} {docNumber}
+                </span>
+                <span>{formatDate(now, language)}</span>
+              </div>
+            </header>
 
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDownload}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium transition-all"
-            >
-              <Download className="h-4 w-4" />
-              Скачать
-            </motion.button>
-          </div>
+            <h2 className="mt-8 text-center text-2xl font-bold tracking-[0.2em] text-blue-950">{t.title.toUpperCase()}</h2>
+
+            <div className="mt-6 space-y-3 text-[13px] leading-[1.75] text-slate-800 [hyphens:auto] [text-align:justify]" lang={language}>
+              {paragraphs.map((text) => (
+                <p key={text} className="indent-6">
+                  {text}
+                </p>
+              ))}
+            </div>
+
+            <div className="relative mt-12 flex items-end justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[12px] leading-snug text-slate-700">{t.signer}</p>
+                <svg viewBox="0 0 120 30" className="mt-2 h-7 w-28 text-blue-900" aria-hidden="true">
+                  <path d="M2 22c10-14 14-16 16-10s-6 10 0 8 10-18 16-14-4 16 4 12 8-12 14-10 2 10 10 6 16-10 20-6 10 4 34-6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+                <div className="mt-1 w-32 border-t border-slate-400" />
+              </div>
+              <motion.div
+                initial={{ scale: 1.8, rotate: -28, opacity: 0 }}
+                animate={{ scale: 1, rotate: -12, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 18, delay: 0.35 }}
+                className="-mb-6 -mr-2 shrink-0 mix-blend-multiply"
+              >
+                <Stamp top={t.stampTop} bottom={t.stampBottom} center={t.stampCenter} date={now.toLocaleDateString('ru-RU')} />
+              </motion.div>
+            </div>
+
+            <footer className="mt-10 border-t border-slate-200 pt-3 text-center font-sans text-[10px] leading-relaxed text-slate-500">
+              {t.verify} <span className="tabular font-semibold text-slate-700">{code}</span>
+            </footer>
+          </motion.article>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 border-t border-white/10 bg-slate-950/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="pressable flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/15"
+          >
+            <Printer className="h-4 w-4" />
+            Печать
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="pressable flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-500"
+          >
+            <Download className="h-4 w-4" />
+            Скачать
+          </button>
         </div>
       </motion.div>
-    </div>
+    </motion.div>,
+    document.body,
   );
 };

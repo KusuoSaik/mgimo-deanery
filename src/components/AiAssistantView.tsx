@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Send, Shield, CheckCircle2, Loader } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowUp, CircleCheck, KeyRound, ServerCog, ShieldCheck, Sparkles, UserX } from 'lucide-react';
 import type { ChatMessage, GradeItem, RequestItem, UserProfile, ScheduleItem } from '../types';
 import { ActionableAICard } from './ActionableAICard';
+import { BottomSheet } from './BottomSheet';
+import { firstName } from './ui/tokens';
 
 type RequestFormData = Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>;
 
@@ -15,13 +17,15 @@ type AiAssistantViewProps = {
   onAddRequest: (request: RequestFormData) => void;
 };
 
+type SuggestedAction = {
+  type: 'request';
+  title: string;
+  category: string;
+  deliveryFormat: string;
+};
+
 interface AIMessage extends ChatMessage {
-  suggestedAction?: {
-    type: 'request';
-    title: string;
-    category: string;
-    deliveryFormat: string;
-  };
+  suggestedAction?: SuggestedAction;
   actionSent?: boolean;
 }
 
@@ -31,51 +35,76 @@ const ROLE_SUGGESTIONS: Record<string, string[]> = {
   'Иностранный студент': ['Справка для продления визы', 'Документы для посольства', 'Когда зимние каникулы?'],
 };
 
+let messageSeq = 0;
+function makeId(): string {
+  messageSeq += 1;
+  return `msg-${messageSeq}-${Math.round(performance.now())}`;
+}
+
 function nowTime(): string {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
-export default function AiAssistantView({
-  user,
-  onAddRequest,
-}: AiAssistantViewProps) {
+function TypingDots() {
+  return (
+    <span className="flex items-center gap-1 py-1" aria-label="Ассистент печатает">
+      {[0, 1, 2].map((dot) => (
+        <motion.span
+          key={dot}
+          className="h-1.5 w-1.5 rounded-full bg-slate-400"
+          animate={{ y: [0, -4, 0], opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.15, ease: 'easeInOut' }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function AiMark() {
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-amber-300 ring-2 ring-white">
+      <Sparkles className="h-3.5 w-3.5" />
+    </span>
+  );
+}
+
+export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewProps) {
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: 'msg-welcome',
       sender: 'ai',
-      text: `Здравствуйте, ${user.name.split(' ')[0]}! Я ассистент цифрового деканата МГИМО. Помогу вам с расписанием, оценками, заявками и документами. Чем я вам помогу?`,
+      text: `Здравствуйте, ${firstName(user.name)}! Я ассистент цифрового деканата. Подскажу по расписанию и оценкам, оформлю справку или заявку. С чего начнём?`,
       timestamp: nowTime(),
     },
   ]);
-
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPdnInfo, setShowPdnInfo] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const hasUserMessages = messages.some((m) => m.sender === 'user');
+  const suggestions = ROLE_SUGGESTIONS[user.role ?? 'Студент'] ?? ROLE_SUGGESTIONS['Студент'];
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const node = scrollRef.current;
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+  }, [messages, isLoading]);
 
-  const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
+  useEffect(() => {
+    const node = inputRef.current;
+    if (!node) return;
+    node.style.height = 'auto';
+    node.style.height = `${Math.min(node.scrollHeight, 120)}px`;
+  }, [inputValue]);
 
-    const userMessage: AIMessage = {
-      id: `msg-${Date.now()}`,
-      sender: 'user',
-      text: inputValue,
-      timestamp: nowTime(),
-    };
+  async function send(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || isLoading) return;
 
-    const conversationMessages = [...messages, userMessage];
-    setMessages(conversationMessages);
+    const userMessage: AIMessage = { id: makeId(), sender: 'user', text: trimmed, timestamp: nowTime() };
+    const history = [...messages, userMessage];
+    setMessages(history);
     setInputValue('');
     setIsLoading(true);
 
@@ -85,12 +114,9 @@ export default function AiAssistantView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: conversationMessages
+          messages: history
             .filter((m) => m.id !== 'msg-welcome' && !m.suggestedAction)
-            .map((m) => ({
-              role: m.sender === 'user' ? 'user' : 'assistant',
-              content: m.text,
-            })),
+            .map((m) => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
           studentData: {
             name: user.name,
             course: user.course,
@@ -105,254 +131,219 @@ export default function AiAssistantView({
       });
 
       if (!response.ok) throw new Error('API error');
-
-      const data = (await response.json()) as {
-        response: string;
-        suggestedAction?: {
-          type: 'request';
-          title: string;
-          category: string;
-          deliveryFormat: string;
-        };
-      };
-
-      const aiMessage: AIMessage = {
-        id: `msg-${Date.now()}`,
-        sender: 'ai',
-        text: data.response,
-        timestamp: nowTime(),
-        suggestedAction: data.suggestedAction,
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
+      const data = (await response.json()) as { response: string; suggestedAction?: SuggestedAction };
+      setMessages((prev) => [
+        ...prev,
+        { id: makeId(), sender: 'ai', text: data.response, timestamp: nowTime(), suggestedAction: data.suggestedAction },
+      ]);
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage: AIMessage = {
-        id: `msg-${Date.now()}`,
-        sender: 'ai',
-        text: 'Извините, проблемы с соединением. Пожалуйста, проверьте интернет и попробуйте снова.',
-        timestamp: nowTime(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          sender: 'ai',
+          text: 'Не удалось связаться с сервером ассистента. Проверьте подключение и отправьте сообщение ещё раз.',
+          timestamp: nowTime(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const handleSuggestedAction = (title: string) => {
-    setInputValue(title);
-    inputRef.current?.focus();
-  };
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void send(inputValue);
+  }
 
-  const handleRequestAction = (
-    action: {
-      type: 'request';
-      title: string;
-      category: string;
-      deliveryFormat: string;
-    },
-    messageId: string,
-  ) => {
+  function handleRequestAction(action: SuggestedAction, messageId: string) {
     onAddRequest({
       title: action.title,
       category: action.category as RequestItem['category'],
       deliveryFormat: action.deliveryFormat as RequestItem['deliveryFormat'],
     });
-
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)),
-    );
-  };
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)));
+  }
 
   return (
-    <div className="pb-24 h-screen flex flex-col">
-      {/* Header */}
-      <header className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-4 shadow-md">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Bot className="h-6 w-6 text-indigo-300" />
-            <h1 className="font-semibold text-lg">ИИ-ассистент деканата</h1>
+    <div className="flex h-[calc(100dvh-52px)] flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+      <header className="relative shrink-0 overflow-hidden rounded-b-3xl bg-slate-900 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-4 pb-4 pt-3 text-white shadow-md">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/25">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[17px] font-semibold leading-tight tracking-tight">ИИ-ассистент деканата</h1>
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              На связи, данные обезличены
+            </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+          <button
+            type="button"
             onClick={() => setShowPdnInfo(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600/40 hover:bg-blue-600/60 text-xs font-medium transition-all"
+            className="pressable flex items-center gap-1.5 rounded-xl bg-white/[0.08] px-2.5 py-1.5 text-xs font-medium text-slate-200 ring-1 ring-inset ring-white/10 hover:bg-white/[0.12]"
           >
-            <Shield className="h-3.5 w-3.5" />
-            🛡️ 152-ФЗ
-          </motion.button>
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+            152-ФЗ
+          </button>
         </div>
-        <p className="text-xs text-indigo-200">
-          Безопасный канал • API-ключ защищен на сервере • {user.role}
-        </p>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        <AnimatePresence>
-          {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-xs px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.sender === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-slate-100 text-slate-900 rounded-bl-none'
-                }`}
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
+        <AnimatePresence initial={false}>
+          {messages.map((msg) => {
+            const mine = msg.sender === 'user';
+            return (
+              <motion.div
+                key={msg.id}
+                layout="position"
+                initial={{ opacity: 0, y: 14, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                style={{ originX: mine ? 1 : 0, originY: 1 }}
+                className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}
               >
-                <p>{msg.text}</p>
-                <p className={`text-[10px] mt-1.5 ${msg.sender === 'user' ? 'text-blue-100' : 'text-slate-500'}`}>
-                  {msg.timestamp}
-                </p>
+                {!mine && <AiMark />}
+                <div
+                  className={`max-w-[80%] px-3.5 py-2.5 text-[14px] leading-relaxed ${
+                    mine
+                      ? 'rounded-[20px] rounded-br-md bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                      : 'rounded-[20px] rounded-bl-md bg-white text-slate-800 shadow-[var(--shadow-card)] ring-1 ring-slate-200/70'
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                  <p className={`tabular mt-1 text-right text-[10.5px] ${mine ? 'text-blue-200' : 'text-slate-400'}`}>{msg.timestamp}</p>
 
-                {/* Actionable AI Card */}
-                {msg.suggestedAction && !msg.actionSent && (
-                  <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="mt-3">
-                    <ActionableAICard
-                      action={msg.suggestedAction}
-                      onConfirm={() => handleRequestAction(msg.suggestedAction!, msg.id)}
-                    />
-                  </motion.div>
-                )}
-
-                {msg.actionSent && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="mt-2 flex items-center gap-1 text-emerald-600 text-xs font-medium"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    ✅ Заявка отправлена в СЭД
-                  </motion.div>
-                )}
-              </div>
-            </motion.div>
-          ))}
+                  {msg.suggestedAction && !msg.actionSent && (
+                    <ActionableAICard action={msg.suggestedAction} onConfirm={() => handleRequestAction(msg.suggestedAction!, msg.id)} />
+                  )}
+                  {msg.actionSent && (
+                    <motion.p
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700"
+                    >
+                      <CircleCheck className="h-3.5 w-3.5" />
+                      Заявка отправлена в СЭД
+                    </motion.p>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
 
           {isLoading && (
             <motion.div
+              key="typing"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex justify-start"
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              className="flex items-end gap-2"
             >
-              <div className="flex items-center gap-2 bg-slate-100 px-4 py-3 rounded-2xl rounded-bl-none">
-                <Loader className="h-4 w-4 animate-spin text-slate-600" />
-                <p className="text-sm text-slate-600">Думаю...</p>
+              <AiMark />
+              <div className="rounded-[20px] rounded-bl-md bg-white px-4 py-2.5 shadow-[var(--shadow-card)] ring-1 ring-slate-200/70">
+                <TypingDots />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick suggestions */}
-      <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
-        <p className="text-xs text-slate-600 mb-2">Попробуй:</p>
-        <div className="flex flex-wrap gap-2">
-          {(ROLE_SUGGESTIONS[user.role as keyof typeof ROLE_SUGGESTIONS] || []).map((suggestion) => (
-            <motion.button
-              key={suggestion}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handleSuggestedAction(suggestion)}
-              className="text-xs px-3 py-1.5 rounded-full bg-white border border-slate-200 hover:border-blue-400 text-slate-700 transition-all"
+      <div className="shrink-0 border-t border-slate-200/70 bg-slate-50/95 pt-2.5 backdrop-blur">
+        <AnimatePresence initial={false}>
+          {!hasUserMessages && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden"
             >
-              {suggestion}
+              <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 pb-2.5">
+                {suggestions.map((suggestion, index) => (
+                  <motion.button
+                    key={suggestion}
+                    type="button"
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 + index * 0.05 }}
+                    onClick={() => void send(suggestion)}
+                    className="pressable shrink-0 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] text-slate-700 hover:border-blue-300 hover:text-blue-700"
+                  >
+                    {suggestion}
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <form onSubmit={handleSubmit} className="px-4 pb-3">
+          <div className="flex items-end gap-2 rounded-[22px] border border-slate-200 bg-white py-1.5 pl-4 pr-1.5 shadow-[var(--shadow-card)] transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10">
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void send(inputValue);
+                }
+              }}
+              placeholder="Спросите что-нибудь"
+              rows={1}
+              aria-label="Сообщение ассистенту"
+              className="max-h-[120px] min-h-[24px] flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-6 text-slate-900 outline-none placeholder:text-slate-400"
+            />
+            <motion.button
+              type="submit"
+              aria-label="Отправить"
+              disabled={isLoading || !inputValue.trim()}
+              animate={{ scale: inputValue.trim() ? 1 : 0.85, opacity: inputValue.trim() ? 1 : 0.5 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 28 }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white disabled:bg-slate-300"
+            >
+              <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
             </motion.button>
-          ))}
-        </div>
+          </div>
+        </form>
       </div>
 
-      {/* Input */}
-      <form
-        onSubmit={sendMessage}
-        className="border-t border-slate-200 bg-white px-4 py-3 flex items-end gap-2"
-      >
-        <textarea
-          ref={inputRef}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage(e as any);
-            }
-          }}
-          placeholder="Напишите вопрос..."
-          rows={1}
-          className="flex-1 resize-none px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-        />
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          type="submit"
-          disabled={isLoading || !inputValue.trim()}
-          className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white transition-all"
-        >
-          {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </motion.button>
-      </form>
-
-      {/* PDN Info Modal */}
-      {showPdnInfo && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end"
+      <BottomSheet isOpen={showPdnInfo} onClose={() => setShowPdnInfo(false)} title="Как защищены ваши данные" subtitle="Ассистент работает по 152-ФЗ">
+        <ul className="space-y-4">
+          {[
+            { icon: KeyRound, title: 'Ключ API хранится на сервере', text: 'В браузере и DevTools его не видно.' },
+            { icon: UserX, title: 'ФИО заменяется на роль', text: 'Модель видит только курс, факультет и роль.' },
+            { icon: ShieldCheck, title: 'Паспорт и СНИЛС не уходят в модель', text: 'Они остаются внутри контура МГИМО.' },
+            { icon: ServerCog, title: 'Запросы идут через прокси деканата', text: 'Сервер добавляет системные инструкции и отправляет обезличенный запрос.' },
+          ].map(({ icon: Icon, title, text }, index) => (
+            <motion.li
+              key={title}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + index * 0.06 }}
+              className="flex gap-3"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-slate-900">{title}</p>
+                <p className="mt-0.5 text-[13px] text-slate-500">{text}</p>
+              </div>
+            </motion.li>
+          ))}
+        </ul>
+        <button
+          type="button"
           onClick={() => setShowPdnInfo(false)}
+          className="pressable mt-6 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
         >
-          <motion.div
-            initial={{ y: 100 }}
-            animate={{ y: 0 }}
-            exit={{ y: 100 }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white rounded-t-3xl p-6 shadow-2xl"
-          >
-            <h2 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2">
-              <Shield className="h-5 w-5 text-blue-600" />
-              Защита персональных данных (152-ФЗ)
-            </h2>
-
-            <div className="space-y-4">
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
-                <p className="text-xs font-semibold text-blue-900 mb-2">🔒 Что скрыто:</p>
-                <ul className="text-xs text-blue-800 space-y-1">
-                  <li>✓ API-ключ хранится на сервере (не видно в DevTools)</li>
-                  <li>✓ ФИО замаскировано (только роль, курс, факультет)</li>
-                  <li>✓ Баллы БРС передаются без идентификатора</li>
-                  <li>✓ SNILS и паспорт НИКОГДА не отправляются в LLM</li>
-                </ul>
-              </div>
-
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                <p className="text-xs font-semibold text-emerald-900 mb-2">✨ Как работает:</p>
-                <ol className="text-xs text-emerald-800 space-y-1">
-                  <li>1. Вы пишете сообщение в браузер</li>
-                  <li>2. Ваше сообщение + обезличенные данные идут на сервер</li>
-                  <li>3. Сервер добавляет системный промпт с шифрованием</li>
-                  <li>4. Запрос идет в LLM API (без ПДн в открытом виде)</li>
-                  <li>5. Ответ приходит в браузер</li>
-                </ol>
-              </div>
-
-              <button
-                onClick={() => setShowPdnInfo(false)}
-                className="w-full mt-4 px-4 py-2.5 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 transition-all"
-              >
-                Понял ✓
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
+          Понятно
+        </button>
+      </BottomSheet>
     </div>
   );
 }

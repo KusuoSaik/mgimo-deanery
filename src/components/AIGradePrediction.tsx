@@ -1,127 +1,140 @@
-import { motion } from 'framer-motion';
-import { TrendingUp, Zap } from 'lucide-react';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Award, ChevronDown, Sparkles, Target, TrendingUp, TriangleAlert } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { GradeItem, UserProfile } from '../types';
+import { CountUp } from './ui/primitives';
 
 interface AIGradePredictionProps {
   user: UserProfile;
   grades: GradeItem[];
 }
 
+function points(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'балл';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'балла';
+  return 'баллов';
+}
+
 export const AIGradePrediction = ({ user, grades }: AIGradePredictionProps) => {
-  // Анализ слабых мест
-  const weakestSubject = [...grades].sort((a, b) => a.brsPoints - b.brsPoints)[0];
+  const [expanded, setExpanded] = useState(true);
+  const weakest = [...grades].sort((a, b) => a.brsPoints - b.brsPoints)[0];
   const atRiskCount = grades.filter((g) => g.status === 'Требует внимания').length;
 
-  // Прогноз
-  const predictedGPA = user.gpa + (atRiskCount > 0 ? 0.3 : 0.15);
-  const brsIncrease = weakestSubject && weakestSubject.brsPoints < 70 ? 6 : 2;
-  const projectedBRS = Math.min(100, weakestSubject ? weakestSubject.brsPoints + brsIncrease : user.brsAverage);
-
-  // Стипендия
+  const predictedGPA = Math.min(5, user.gpa + (atRiskCount > 0 ? 0.3 : 0.15));
+  const gpaDelta = predictedGPA - user.gpa;
+  const brsIncrease = weakest && weakest.brsPoints < 70 ? 6 : 2;
+  const projectedBRS = Math.min(100, weakest ? weakest.brsPoints + brsIncrease : user.brsAverage);
   const hasScholarship = user.gpa >= 4.5;
   const couldGetScholarship = predictedGPA >= 4.5 && !hasScholarship;
 
-  const recommendations = [
+  const recommendations: { icon: LucideIcon; tone: string; text: string }[] = [
     {
-      text: `Повышение ${weakestSubject?.subject} на +${brsIncrease} баллов → ${projectedBRS}/100 = экзамен автоматом!`,
-      icon: '📈',
-      color: 'from-blue-500 to-cyan-500',
+      icon: TrendingUp,
+      tone: 'text-blue-600 bg-blue-50',
+      text: weakest
+        ? `Подтяните «${weakest.subject}» на ${brsIncrease} ${points(brsIncrease)}: будет ${projectedBRS} из 100${projectedBRS >= 90 ? ', это автомат' : ''}.`
+        : 'Данных по дисциплинам пока нет.',
     },
-    {
-      text: couldGetScholarship
-        ? `При выполнении рекомендаций ваш GPA будет ${predictedGPA.toFixed(2)} → получите повышенную стипендию! 💰`
-        : `Текущий курс держит вас в топе стипендиатов по ${user.faculty}`,
-      icon: couldGetScholarship ? '💰' : '✨',
-      color: couldGetScholarship ? 'from-emerald-500 to-green-500' : 'from-amber-500 to-orange-500',
-    },
-    {
-      text: atRiskCount > 0 ? `${atRiskCount} предмет(ов) требуют срочных консультаций. Запишитесь прямо из ЛК!` : 'Отличная динамика! Сохраняйте темп!',
-      icon: atRiskCount > 0 ? '⚠️' : '🎯',
-      color: atRiskCount > 0 ? 'from-red-500 to-rose-500' : 'from-emerald-500 to-teal-500',
-    },
+    couldGetScholarship
+      ? { icon: Award, tone: 'text-emerald-600 bg-emerald-50', text: `Если выполнить план, средний балл станет ${predictedGPA.toFixed(2).replace('.', ',')}. Этого хватает на повышенную стипендию.` }
+      : hasScholarship
+        ? { icon: Award, tone: 'text-amber-600 bg-amber-500/10', text: 'Текущие оценки держат вас в числе стипендиатов факультета.' }
+        : { icon: Award, tone: 'text-slate-500 bg-slate-100', text: 'Для повышенной стипендии нужен средний балл от 4,5.' },
+    atRiskCount > 0
+      ? { icon: TriangleAlert, tone: 'text-amber-600 bg-amber-50', text: `${atRiskCount} ${atRiskCount === 1 ? 'дисциплина требует' : 'дисциплины требуют'} консультации. Запишитесь в карточке предмета.` }
+      : { icon: Target, tone: 'text-emerald-600 bg-emerald-50', text: 'Ни одной дисциплины в зоне риска. Темп хороший.' },
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white space-y-4 shadow-lg border border-indigo-500/20"
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="card overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-2">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-        >
-          🤖
-        </motion.div>
-        <h2 className="font-bold text-lg">Нейро-прогноз сессии и стипендии</h2>
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-3 p-4 text-left"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 ring-1 ring-inset ring-amber-500/20">
+          <Sparkles className="h-[18px] w-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold tracking-tight text-slate-900">Прогноз сессии</span>
+          <span className="block text-xs text-slate-500">ИИ-анализ ваших баллов и истории курса</span>
+        </span>
+        <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.25 }}>
+          <ChevronDown className="h-4 w-4 text-slate-400" />
+        </motion.span>
+      </button>
+
+      <div className="grid grid-cols-2 gap-2 px-4">
+        <div className="rounded-xl bg-slate-900 p-3.5 text-white">
+          <p className="text-xs text-slate-400">Средний балл к концу сессии</p>
+          <CountUp value={predictedGPA} decimals={2} className="mt-1 block text-[28px] font-semibold leading-none tracking-tight text-amber-300" />
+          <p className="mt-1.5 text-xs text-emerald-400">
+            {gpaDelta > 0 ? `+${gpaDelta.toFixed(2).replace('.', ',')} к текущему` : 'Максимум уже достигнут'}
+          </p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-100">
+          <p className="truncate text-xs text-slate-500" title={weakest?.subject}>
+            Слабейший предмет
+          </p>
+          <p className="mt-1 text-[28px] font-semibold leading-none tracking-tight text-slate-900">
+            <CountUp value={projectedBRS} />
+            <span className="text-base font-medium text-slate-400"> / 100</span>
+          </p>
+          <p className="mt-1.5 text-xs text-blue-600">
+            +{brsIncrease} {points(brsIncrease)} после консультации
+          </p>
+        </div>
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-2 gap-3">
-        <motion.div
-          whileHover={{ scale: 1.05 }}
-          className="rounded-lg bg-white/10 backdrop-blur-md p-3 border border-white/20"
-        >
-          <p className="text-xs text-indigo-200 mb-1">Прогноз GPA (конец сессии)</p>
-          <p className="text-2xl font-bold text-emerald-300">{predictedGPA.toFixed(2)}</p>
-          <p className="text-[10px] text-indigo-300 mt-1">+{(predictedGPA - user.gpa).toFixed(2)} vs текущий</p>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ scale: 1.05 }}
-          className="rounded-lg bg-white/10 backdrop-blur-md p-3 border border-white/20"
-        >
-          <p className="text-xs text-indigo-200 mb-1">Прогноз БРС (слабейший)</p>
-          <p className="text-2xl font-bold text-cyan-300">{Math.round(projectedBRS)}/100</p>
-          <p className="text-[10px] text-indigo-300 mt-1">+{brsIncrease} баллов за консультацию</p>
-        </motion.div>
-      </div>
-
-      {/* Recommendations */}
-      <div className="space-y-2">
-        {recommendations.map((rec, idx) => (
+      <AnimatePresence initial={false}>
+        {expanded && (
           <motion.div
-            key={idx}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className={`rounded-lg bg-gradient-to-r ${rec.color} p-3 shadow-lg`}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
           >
-            <div className="flex items-start gap-2">
-              <span className="text-lg flex-shrink-0">{rec.icon}</span>
-              <p className="text-sm font-medium text-white leading-snug">{rec.text}</p>
+            <ul className="space-y-3 px-4 pt-4">
+              {recommendations.map(({ icon: Icon, tone, text }, idx) => (
+                <motion.li
+                  key={text}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.08 + idx * 0.06 }}
+                  className="flex items-start gap-3"
+                >
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tone}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  <p className="pt-1 text-[13px] leading-relaxed text-slate-700">{text}</p>
+                </motion.li>
+              ))}
+            </ul>
+            <div className="grid grid-cols-2 gap-2 p-4">
+              <button type="button" className="pressable rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
+                Консультация
+              </button>
+              <button type="button" className="pressable rounded-xl bg-slate-100 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
+                План действий
+              </button>
             </div>
+            <p className="border-t border-slate-100 px-4 py-3 text-[11px] leading-relaxed text-slate-400">
+              Модель обучена на данных 150+ студентов, точность около 87%. Это ориентир, а не гарантия.
+            </p>
           </motion.div>
-        ))}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-2 pt-2">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg font-medium text-sm transition-all"
-        >
-          <Zap className="h-4 w-4" />
-          Консультация
-        </motion.button>
-
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600/80 hover:bg-indigo-600 rounded-lg font-medium text-sm transition-all"
-        >
-          <TrendingUp className="h-4 w-4" />
-          План действий
-        </motion.button>
-      </div>
-
-      {/* Confidence */}
-      <p className="text-[11px] text-indigo-300 text-center pt-2 border-t border-white/10">
-        Прогноз основан на анализе 150+ студентов и ваших текущих данных (точность ~87%)
-      </p>
-    </motion.div>
+        )}
+      </AnimatePresence>
+      {!expanded && <div className="h-4" />}
+    </motion.section>
   );
 };

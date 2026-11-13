@@ -1,25 +1,24 @@
-import { useState, useEffect } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import type { ClipboardEvent, FormEvent, KeyboardEvent, ReactNode } from 'react';
+import { AnimatePresence, motion, useAnimationControls } from 'framer-motion';
 import {
-  ArrowRight,
-  Building2,
-  KeyRound,
-  RefreshCw,
+  AtSign,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  Eye,
+  EyeOff,
+  Landmark,
+  LoaderCircle,
+  Lock,
   ShieldCheck,
   Smartphone,
-  AlertCircle,
-  UserPlus,
-  LogIn,
+  UserRound,
 } from 'lucide-react';
 import type { Faculty, UserRole, RegisterData } from '../../auth/types';
-import {
-  validateCredentials,
-  create2FASession,
-  verify2FACode,
-  resend2FACode,
-  registerAccount,
-} from '../../auth/authService';
+import { validateCredentials, create2FASession, verify2FACode, resend2FACode, registerAccount } from '../../auth/authService';
+import { Guilloche } from '../ui/Guilloche';
+import { Segmented } from '../ui/primitives';
 
 export interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -28,32 +27,75 @@ export interface LoginScreenProps {
 type Screen = 'credentials' | '2fa' | 'register';
 type AuthMethod = 'mgimo' | 'esia';
 
-// Демо-аккаунты для быстрого входа
 const DEMO_ACCOUNTS = [
-  { label: 'Алексей — Староста', email: 'a.volkov@my.mgimo.ru', password: 'mgimo2026', badge: '⭐' },
-  { label: 'Дмитрий — Должник', email: 'd.sokolov@my.mgimo.ru', password: 'debt1234', badge: '⚠️' },
-  { label: 'София — Иностранец', email: 's.chen@my.mgimo.ru', password: 'china2025', badge: '🌍' },
+  { name: 'Алексей Волков', hint: 'Староста, отличник', initials: 'АВ', tone: 'bg-blue-900 text-amber-300', email: 'a.volkov@my.mgimo.ru', password: 'mgimo2026' },
+  { name: 'Дмитрий Соколов', hint: 'Есть долги по БРС', initials: 'ДС', tone: 'bg-amber-900/70 text-amber-200', email: 'd.sokolov@my.mgimo.ru', password: 'debt1234' },
+  { name: 'София Чен', hint: 'Иностранная студентка', initials: 'СЧ', tone: 'bg-emerald-900/70 text-emerald-200', email: 's.chen@my.mgimo.ru', password: 'china2025' },
 ];
 
+const FACULTIES: Faculty[] = ['МО', 'МП', 'МЭО', 'МИЭП', 'ИМТУР', 'ФУП'];
+const ROLES: UserRole[] = ['Студент', 'Староста', 'Иностранный студент'];
+
+const inputBase =
+  'w-full rounded-xl border bg-slate-950/50 py-3 text-[15px] text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 focus:bg-slate-950/70 focus:ring-4 focus:ring-blue-500/15';
+
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div>
+      <label htmlFor={htmlFor} className="mb-1.5 block text-[13px] font-medium text-slate-300">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ErrorNote({ text }: { text: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      className="overflow-hidden"
+    >
+      <p className="flex items-center gap-2 rounded-xl bg-rose-500/10 px-3 py-2.5 text-[13px] text-rose-300 ring-1 ring-inset ring-rose-500/20">
+        <CircleAlert className="h-4 w-4 shrink-0" />
+        {text}
+      </p>
+    </motion.div>
+  );
+}
+
+function SelectField({ id, value, onChange, children }: { id: string; value: string | number; onChange: (value: string) => void; children: ReactNode }) {
+  return (
+    <div className="relative">
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={`${inputBase} appearance-none border-slate-700/80 pl-3.5 pr-9`}>
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+    </div>
+  );
+}
+
 export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
-  // State управление
   const [screen, setScreen] = useState<Screen>('credentials');
   const [authMethod, setAuthMethod] = useState<AuthMethod>('mgimo');
+  const shake = useAnimationControls();
 
-  // Вход
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [isShaking, setIsShaking] = useState(false);
 
-  // 2FA
   const [otp, setOtp] = useState(['', '', '', '']);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [verified, setVerified] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
   const [countdown, setCountdown] = useState(30);
   const [generated2FACode, setGenerated2FACode] = useState('');
+  const [pushVisible, setPushVisible] = useState(false);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Регистрация
   const [regFullName, setRegFullName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -62,114 +104,107 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
   const [regRole, setRegRole] = useState<UserRole>('Студент');
   const [regError, setRegError] = useState('');
 
-  // Таймер для 2FA
   useEffect(() => {
     if (screen !== '2fa' || countdown <= 0) return;
-    const timer = setInterval(() => {
-      setCountdown((prev) => prev - 1);
-    }, 1000);
+    const timer = setInterval(() => setCountdown((prev) => prev - 1), 1000);
     return () => clearInterval(timer);
   }, [screen, countdown]);
 
-  // Показ сгенерированного кода как пуш-уведомление
   useEffect(() => {
-    if (generated2FACode) {
-      // Симуляция пуш-уведомления
-      console.log(`
-╔═══════════════════════════════════════════════╗
-║         🔔 MGIMO ID Push Notification        ║
-╠═══════════════════════════════════════════════╣
-║                                               ║
-║  Код подтверждения входа:                    ║
-║                                               ║
-║           ┌───┬───┬───┬───┐                  ║
-║           │ ${generated2FACode[0]} │ ${generated2FACode[1]} │ ${generated2FACode[2]} │ ${generated2FACode[3]} │                  ║
-║           └───┴───┴───┴───┘                  ║
-║                                               ║
-║  Действителен 5 минут                        ║
-║                                               ║
-╚═══════════════════════════════════════════════╝
-      `);
-    }
+    if (!generated2FACode) return;
+    console.info(`MGIMO ID: код подтверждения входа ${generated2FACode}`);
+    const show = window.setTimeout(() => setPushVisible(true), 700);
+    const hide = window.setTimeout(() => setPushVisible(false), 9000);
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(hide);
+    };
   }, [generated2FACode]);
 
-  // Обработка входа (шаг 1)
+  useEffect(() => {
+    if (screen === '2fa') window.setTimeout(() => otpRefs.current[0]?.focus(), 350);
+  }, [screen]);
+
+  const triggerShake = () => {
+    void shake.start({ x: [0, -10, 9, -7, 5, -2, 0], transition: { duration: 0.45 } });
+  };
+
   const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoginError('');
-
     const result = validateCredentials({ email: loginEmail, password: loginPassword });
-
     if (!result.success) {
-      setLoginError(result.error || 'Ошибка входа');
-      triggerShakeAnimation();
+      setLoginError(result.error || 'Неверный логин или пароль');
+      triggerShake();
       return;
     }
-
     if (result.account) {
       const code = create2FASession(result.account);
       setGenerated2FACode(code);
       setCountdown(30);
+      setOtp(['', '', '', '']);
+      setTwoFactorError('');
       setScreen('2fa');
     }
   };
 
-  // Анимация тряски при ошибке
-  const triggerShakeAnimation = () => {
-    setIsShaking(true);
-    setTimeout(() => setIsShaking(false), 500);
-  };
-
-  // Обработка OTP
-  const handleOtpChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return;
-    const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
-    setOtp(newOtp);
-
-    if (value && index < 3) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      nextInput?.focus();
-    }
-
-    if (newOtp.every((digit) => digit !== '')) {
-      verifyOtp(newOtp.join(''));
-    }
-  };
-
-  const handleKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Backspace' && !otp[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-${index - 1}`);
-      prevInput?.focus();
-    }
-  };
-
-  // Проверка 2FA кода
   const verifyOtp = (code: string) => {
     setIsVerifying(true);
     setTwoFactorError('');
-
-    setTimeout(() => {
+    window.setTimeout(() => {
       const result = verify2FACode(code);
-
       if (!result.success) {
-        setTwoFactorError(result.error || 'Неверный код');
+        setTwoFactorError(result.error || 'Код не подошёл. Проверьте цифры и введите ещё раз.');
         setOtp(['', '', '', '']);
         setIsVerifying(false);
-        const firstInput = document.getElementById('otp-0');
-        firstInput?.focus();
+        triggerShake();
+        otpRefs.current[0]?.focus();
         return;
       }
-
-      // Успешная авторизация
-      setTimeout(() => {
+      setPushVisible(false);
+      setVerified(true);
+      window.setTimeout(() => {
         setIsVerifying(false);
         onLoginSuccess();
-      }, 800);
-    }, 900);
+      }, 900);
+    }, 800);
   };
 
-  // Повторная отправка кода
+  const fillOtp = (digits: string) => {
+    const next = ['', '', '', ''].map((_, i) => digits[i] ?? '');
+    setOtp(next);
+    const firstEmpty = next.findIndex((d) => !d);
+    otpRefs.current[firstEmpty === -1 ? 3 : firstEmpty]?.focus();
+    if (next.every(Boolean)) verifyOtp(next.join(''));
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length > 1) {
+      fillOtp((otp.slice(0, index).join('') + digits).slice(0, 4));
+      return;
+    }
+    const next = [...otp];
+    next[index] = digits;
+    setOtp(next);
+    if (digits && index < 3) otpRefs.current[index + 1]?.focus();
+    if (next.every((digit) => digit !== '')) verifyOtp(next.join(''));
+  };
+
+  const handleOtpKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && !otp[index] && index > 0) otpRefs.current[index - 1]?.focus();
+    if (event.key === 'ArrowLeft' && index > 0) otpRefs.current[index - 1]?.focus();
+    if (event.key === 'ArrowRight' && index < 3) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const digits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    if (digits) {
+      event.preventDefault();
+      fillOtp(digits);
+    }
+  };
+
   const handleResendCode = () => {
     const newCode = resend2FACode();
     if (newCode) {
@@ -177,482 +212,441 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
       setCountdown(30);
       setOtp(['', '', '', '']);
       setTwoFactorError('');
-      const firstInput = document.getElementById('otp-0');
-      firstInput?.focus();
+      otpRefs.current[0]?.focus();
     }
   };
 
-  // Регистрация
   const handleRegisterSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setRegError('');
-
-    const registerData: RegisterData = {
-      fullName: regFullName,
-      email: regEmail,
-      password: regPassword,
-      faculty: regFaculty,
-      course: regCourse,
-      role: regRole,
-    };
-
+    const registerData: RegisterData = { fullName: regFullName, email: regEmail, password: regPassword, faculty: regFaculty, course: regCourse, role: regRole };
     const result = registerAccount(registerData);
-
     if (!result.success) {
-      setRegError(result.error || 'Ошибка регистрации');
-      triggerShakeAnimation();
+      setRegError(result.error || 'Не удалось создать аккаунт');
+      triggerShake();
       return;
     }
-
-    // После регистрации переходим ко входу
     setLoginEmail(regEmail);
     setLoginPassword(regPassword);
     setScreen('credentials');
     setRegError('');
   };
 
-  // Быстрый вход для демо
   const handleDemoLogin = (email: string, password: string) => {
     setLoginEmail(email);
     setLoginPassword(password);
+    setLoginError('');
     setAuthMethod('mgimo');
   };
 
+  const panel = {
+    initial: { opacity: 0, x: 24 },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0, x: -24 },
+    transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
+  };
+
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-between items-center p-4 selection:bg-blue-600 selection:text-white">
-      <div className="w-full max-w-md flex flex-col flex-grow justify-center py-6">
-        {/* Логотип */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-950 border border-blue-600/30 shadow-lg shadow-blue-900/20 mb-3 text-amber-500">
-            <Building2 className="w-9 h-9" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Цифровой деканат</h1>
-          <p className="text-xs uppercase tracking-widest text-blue-400 font-semibold mt-1">
-            МГИМО МИД России
-          </p>
-        </div>
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-slate-950 px-4 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-indigo-950/80 via-slate-950 to-slate-950" />
+      <div className="pointer-events-none absolute left-1/2 top-[-6rem] h-[34rem] w-[34rem] -translate-x-1/2">
+        <Guilloche draw className="h-full w-full text-amber-300/[0.14]" />
+      </div>
+      <div className="pointer-events-none absolute -left-24 bottom-0 h-72 w-72 rounded-full bg-blue-700/20 blur-3xl" />
 
-        {/* Карточка авторизации */}
+      <AnimatePresence>
+        {screen === '2fa' && pushVisible && (
+          <motion.button
+            type="button"
+            initial={{ y: -120, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -120, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0.6, bottom: 0.1 }}
+            onDragEnd={(_, info) => info.offset.y < -30 && setPushVisible(false)}
+            onClick={() => fillOtp(generated2FACode)}
+            className="absolute inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex items-center gap-3 rounded-[22px] bg-white/90 p-3 text-left text-slate-900 shadow-2xl shadow-black/40 ring-1 ring-black/5 backdrop-blur-xl"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-amber-300">
+              <Landmark className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-[13px] font-semibold">MGIMO ID</span>
+                <span className="text-[11px] text-slate-500">сейчас</span>
+              </span>
+              <span className="block text-[13px] text-slate-700">
+                Код для входа: <span className="tabular font-semibold tracking-[0.2em] text-slate-900">{generated2FACode}</span>
+              </span>
+              <span className="block text-[11px] text-slate-500">Нажмите, чтобы подставить</span>
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      <div className="relative mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
         <motion.div
-          animate={isShaking ? { x: [-10, 10, -10, 10, 0] } : {}}
-          transition={{ duration: 0.4 }}
-          className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="mb-8 text-center"
         >
-          <AnimatePresence mode="wait">
-            {/* ВХОД */}
-            {screen === 'credentials' && (
-              <motion.div
-                key="credentials"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                {/* Переключатель Вход/Регистрация */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl mb-6 border border-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => setScreen('credentials')}
-                    className="py-2 text-xs font-semibold rounded-lg transition-all bg-blue-600 text-white shadow-md"
-                  >
-                    <LogIn className="w-3.5 h-3.5 inline mr-1.5" />
-                    Вход
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScreen('register');
-                      setLoginError('');
-                    }}
-                    className="py-2 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 inline mr-1.5" />
-                    Регистрация
-                  </button>
-                </div>
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 18, delay: 0.15 }}
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] bg-gradient-to-br from-blue-800 to-indigo-950 text-amber-300 shadow-xl shadow-blue-950/60 ring-1 ring-white/15"
+          >
+            <Landmark className="h-8 w-8" strokeWidth={1.8} />
+          </motion.div>
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight">Цифровой деканат</h1>
+          <p className="mt-1 text-sm text-slate-400">МГИМО МИД России</p>
+        </motion.div>
 
-                {/* Переключатель методов входа */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl mb-6 border border-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => setAuthMethod('mgimo')}
-                    className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                      authMethod === 'mgimo'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    MGIMO ID
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthMethod('esia')}
-                    className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                      authMethod === 'esia'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Госуслуги (ЕСИА)
-                  </button>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+        <motion.div
+          animate={shake}
+          className="overflow-hidden rounded-3xl bg-slate-900/70 p-5 shadow-2xl shadow-black/40 ring-1 ring-inset ring-white/10 backdrop-blur-xl"
+        >
+          {screen !== '2fa' && (
+            <Segmented
+              id="auth-screen"
+              tone="dark"
+              className="mb-5"
+              value={screen === 'register' ? 'register' : 'credentials'}
+              onChange={(value) => {
+                setScreen(value);
+                setLoginError('');
+                setRegError('');
+              }}
+              options={[
+                { value: 'credentials', label: 'Вход' },
+                { value: 'register', label: 'Регистрация' },
+              ]}
+            />
+          )}
+
+          <AnimatePresence mode="wait" initial={false}>
+            {screen === 'credentials' && (
+              <motion.div key="credentials" {...panel}>
+                <div className="mb-5 flex gap-4 border-b border-white/10 text-[13px]">
+                  {(
+                    [
+                      ['mgimo', 'MGIMO ID'],
+                      ['esia', 'Госуслуги'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setAuthMethod(value)}
+                      className={`relative pb-2.5 font-medium transition-colors ${authMethod === value ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      {label}
+                      {authMethod === value && <motion.span layoutId="auth-method" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-amber-400" />}
+                    </button>
+                  ))}
                 </div>
 
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      {authMethod === 'mgimo' ? 'Корпоративный логин (@my.mgimo.ru)' : 'СНИЛС или телефон'}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={loginEmail}
-                      onChange={(e) => {
-                        setLoginEmail(e.target.value);
-                        setLoginError('');
-                      }}
-                      className={`w-full bg-slate-900/90 border ${
-                        loginError ? 'border-red-500' : 'border-slate-700'
-                      } text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all`}
-                      placeholder={authMethod === 'mgimo' ? 'student@my.mgimo.ru' : 'СНИЛС'}
-                    />
-                  </div>
+                  <Field label={authMethod === 'mgimo' ? 'Корпоративная почта' : 'СНИЛС или телефон'} htmlFor="login">
+                    <div className="relative">
+                      <AtSign className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        id="login"
+                        type="text"
+                        required
+                        autoComplete="username"
+                        value={loginEmail}
+                        onChange={(e) => {
+                          setLoginEmail(e.target.value);
+                          setLoginError('');
+                        }}
+                        className={`${inputBase} pl-10 pr-3.5 ${loginError ? 'border-rose-500/70' : 'border-slate-700/80'}`}
+                        placeholder={authMethod === 'mgimo' ? 'student@my.mgimo.ru' : '000-000-000 00'}
+                      />
+                    </div>
+                  </Field>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      Пароль
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={loginPassword}
-                      onChange={(e) => {
-                        setLoginPassword(e.target.value);
-                        setLoginError('');
-                      }}
-                      className={`w-full bg-slate-900/90 border ${
-                        loginError ? 'border-red-500' : 'border-slate-700'
-                      } text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all`}
-                      placeholder="••••••••"
-                    />
-                  </div>
+                  <Field label="Пароль" htmlFor="password">
+                    <div className="relative">
+                      <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        autoComplete="current-password"
+                        value={loginPassword}
+                        onChange={(e) => {
+                          setLoginPassword(e.target.value);
+                          setLoginError('');
+                        }}
+                        className={`${inputBase} pl-10 pr-11 ${loginError ? 'border-rose-500/70' : 'border-slate-700/80'}`}
+                        placeholder="Пароль"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:text-slate-300"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </Field>
 
-                  {loginError && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2"
-                    >
-                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                      <span>{loginError}</span>
-                    </motion.div>
-                  )}
+                  <AnimatePresence>{loginError && <ErrorNote text={loginError} />}</AnimatePresence>
 
                   <button
                     type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm py-3 px-4 rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98] mt-2"
+                    className="pressable w-full rounded-xl bg-blue-600 px-4 py-3 text-[15px] font-medium text-white shadow-lg shadow-blue-600/25 hover:bg-blue-500"
                   >
                     Продолжить
-                    <ArrowRight className="w-4 h-4" />
                   </button>
                 </form>
               </motion.div>
             )}
 
-            {/* 2FA */}
             {screen === '2fa' && (
-              <motion.div
-                key="2fa"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="text-center"
-              >
-                <div className="inline-flex p-3 rounded-full bg-indigo-950/80 border border-blue-500/30 text-amber-500 mb-3">
-                  <Smartphone className="w-6 h-6 animate-pulse" />
-                </div>
-                <h2 className="text-lg font-bold text-white mb-1">Двухфакторная проверка</h2>
-                <p className="text-xs text-slate-400 mb-2">
-                  Введите 4-значный код из пуш-уведомления MGIMO ID
-                </p>
-                <p className="text-[10px] text-amber-400/80 mb-6 font-mono">
-                  (Для демо: код {generated2FACode} в консоли браузера)
+              <motion.div key="2fa" {...panel} className="text-center">
+                <AnimatePresence mode="wait" initial={false}>
+                  {verified ? (
+                    <motion.span
+                      key="ok"
+                      initial={{ scale: 0.4, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                      className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+                    >
+                      <Check className="h-7 w-7" strokeWidth={3} />
+                    </motion.span>
+                  ) : (
+                    <motion.span key="phone" className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-amber-300 ring-1 ring-inset ring-white/10">
+                      <Smartphone className="h-6 w-6" />
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <h2 className="mt-4 text-lg font-semibold tracking-tight">{verified ? 'Вход подтверждён' : 'Подтвердите вход'}</h2>
+                <p className="mx-auto mt-1 max-w-[17rem] text-[13px] text-slate-400">
+                  {verified ? 'Открываем кабинет' : 'Мы отправили четырёхзначный код в приложение MGIMO ID'}
                 </p>
 
-                {/* Поля ввода 4-значного OTP */}
-                <div className="flex justify-center gap-3 mb-4">
+                <div className="mt-6 flex justify-center gap-2.5">
                   {otp.map((digit, idx) => (
-                    <input
+                    <motion.input
                       key={idx}
+                      ref={(node) => {
+                        otpRefs.current[idx] = node;
+                      }}
                       id={`otp-${idx}`}
                       type="text"
                       inputMode="numeric"
-                      maxLength={1}
+                      autoComplete={idx === 0 ? 'one-time-code' : 'off'}
+                      aria-label={`Цифра ${idx + 1}`}
+                      maxLength={4}
                       value={digit}
+                      disabled={isVerifying}
                       onChange={(e) => handleOtpChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(idx, e)}
-                      className="w-12 h-14 text-center text-xl font-bold bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                      onPaste={handleOtpPaste}
+                      animate={
+                        verified
+                          ? { borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.12)', scale: 1 }
+                          : digit
+                            ? { scale: [1, 1.08, 1], borderColor: '#fbbf24' }
+                            : { scale: 1, borderColor: 'rgba(71,85,105,0.8)' }
+                      }
+                      transition={{ duration: 0.25, delay: verified ? idx * 0.05 : 0 }}
+                      className="tabular h-14 w-12 rounded-xl border-2 bg-slate-950/50 text-center text-2xl font-semibold text-white caret-amber-400 outline-none transition-shadow focus:ring-4 focus:ring-amber-400/15 disabled:opacity-80"
                     />
                   ))}
                 </div>
 
-                {twoFactorError && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-4"
-                  >
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <span>{twoFactorError}</span>
-                  </motion.div>
-                )}
+                <div className="mt-4 min-h-6">
+                  <AnimatePresence mode="wait">
+                    {isVerifying && !verified ? (
+                      <motion.p key="checking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-center gap-2 text-[13px] text-slate-400">
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                        Проверяем код
+                      </motion.p>
+                    ) : twoFactorError ? (
+                      <ErrorNote key="err" text={twoFactorError} />
+                    ) : null}
+                  </AnimatePresence>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => verifyOtp(otp.join(''))}
-                  disabled={isVerifying || otp.some(d => !d)}
-                  className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-semibold text-sm py-3 px-4 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 mb-4"
-                >
-                  {isVerifying ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Проверка сертификата...
-                    </>
-                  ) : (
-                    <>
-                      <KeyRound className="w-4 h-4" />
-                      Подтвердить вход
-                    </>
-                  )}
-                </button>
-
-                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                  {countdown > 0 ? (
-                    <span>Повторный код через {countdown} сек</span>
-                  ) : (
+                {!verified && (
+                  <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4 text-[13px]">
+                    {countdown > 0 ? (
+                      <span className="tabular text-slate-500">Новый код через {countdown} с</span>
+                    ) : (
+                      <button type="button" onClick={handleResendCode} className="font-medium text-blue-400 hover:text-blue-300">
+                        Отправить код ещё раз
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={handleResendCode}
-                      className="text-blue-400 hover:underline"
+                      onClick={() => {
+                        setScreen('credentials');
+                        setOtp(['', '', '', '']);
+                        setTwoFactorError('');
+                        setPushVisible(false);
+                      }}
+                      className="font-medium text-slate-400 hover:text-white"
                     >
-                      Запросить код повторно
+                      Изменить логин
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScreen('credentials');
-                      setOtp(['', '', '', '']);
-                      setTwoFactorError('');
-                    }}
-                    className="text-blue-400 hover:underline"
-                  >
-                    Назад
-                  </button>
-                </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
-            {/* РЕГИСТРАЦИЯ */}
             {screen === 'register' && (
-              <motion.div
-                key="register"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                {/* Переключатель Вход/Регистрация */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl mb-6 border border-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScreen('credentials');
-                      setRegError('');
-                    }}
-                    className="py-2 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white"
-                  >
-                    <LogIn className="w-3.5 h-3.5 inline mr-1.5" />
-                    Вход
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScreen('register')}
-                    className="py-2 text-xs font-semibold rounded-lg transition-all bg-blue-600 text-white shadow-md"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 inline mr-1.5" />
-                    Регистрация
-                  </button>
-                </div>
-
-                <form onSubmit={handleRegisterSubmit} className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      ФИО полностью
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regFullName}
-                      onChange={(e) => {
-                        setRegFullName(e.target.value);
-                        setRegError('');
-                      }}
-                      className={`w-full bg-slate-900/90 border ${
-                        regError ? 'border-red-500' : 'border-slate-700'
-                      } text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
-                      placeholder="Иванов Иван Иванович"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      Корпоративный Email (@my.mgimo.ru)
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={regEmail}
-                      onChange={(e) => {
-                        setRegEmail(e.target.value);
-                        setRegError('');
-                      }}
-                      className={`w-full bg-slate-900/90 border ${
-                        regError ? 'border-red-500' : 'border-slate-700'
-                      } text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
-                      placeholder="i.ivanov@my.mgimo.ru"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      Пароль (минимум 6 символов)
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      value={regPassword}
-                      onChange={(e) => {
-                        setRegPassword(e.target.value);
-                        setRegError('');
-                      }}
-                      className={`w-full bg-slate-900/90 border ${
-                        regError ? 'border-red-500' : 'border-slate-700'
-                      } text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
-                      placeholder="••••••••"
-                    />
-                  </div>
-
+              <motion.div key="register" {...panel}>
+                <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                  <Field label="ФИО полностью" htmlFor="reg-name">
+                    <div className="relative">
+                      <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        id="reg-name"
+                        type="text"
+                        required
+                        value={regFullName}
+                        onChange={(e) => {
+                          setRegFullName(e.target.value);
+                          setRegError('');
+                        }}
+                        className={`${inputBase} border-slate-700/80 pl-10 pr-3.5`}
+                        placeholder="Иванов Иван Иванович"
+                      />
+                    </div>
+                  </Field>
+                  <Field label="Корпоративная почта" htmlFor="reg-email">
+                    <div className="relative">
+                      <AtSign className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        id="reg-email"
+                        type="email"
+                        required
+                        value={regEmail}
+                        onChange={(e) => {
+                          setRegEmail(e.target.value);
+                          setRegError('');
+                        }}
+                        className={`${inputBase} border-slate-700/80 pl-10 pr-3.5`}
+                        placeholder="i.ivanov@my.mgimo.ru"
+                      />
+                    </div>
+                  </Field>
+                  <Field label="Пароль, от 6 символов" htmlFor="reg-password">
+                    <div className="relative">
+                      <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        id="reg-password"
+                        type="password"
+                        required
+                        minLength={6}
+                        value={regPassword}
+                        onChange={(e) => {
+                          setRegPassword(e.target.value);
+                          setRegError('');
+                        }}
+                        className={`${inputBase} border-slate-700/80 pl-10 pr-3.5`}
+                        placeholder="Придумайте пароль"
+                      />
+                    </div>
+                  </Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Факультет
-                      </label>
-                      <select
-                        value={regFaculty}
-                        onChange={(e) => setRegFaculty(e.target.value as Faculty)}
-                        className="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                      >
-                        <option value="МО">МО</option>
-                        <option value="МП">МП</option>
-                        <option value="МЭО">МЭО</option>
-                        <option value="МИЭП">МИЭП</option>
-                        <option value="ИМТУР">ИМТУР</option>
-                        <option value="ФУП">ФУП</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Курс
-                      </label>
-                      <select
-                        value={regCourse}
-                        onChange={(e) => setRegCourse(Number(e.target.value))}
-                        className="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                      >
-                        <option value={1}>1 курс</option>
-                        <option value={2}>2 курс</option>
-                        <option value={3}>3 курс</option>
-                        <option value={4}>4 курс</option>
-                      </select>
-                    </div>
+                    <Field label="Факультет" htmlFor="reg-faculty">
+                      <SelectField id="reg-faculty" value={regFaculty} onChange={(v) => setRegFaculty(v as Faculty)}>
+                        {FACULTIES.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </SelectField>
+                    </Field>
+                    <Field label="Курс" htmlFor="reg-course">
+                      <SelectField id="reg-course" value={regCourse} onChange={(v) => setRegCourse(Number(v))}>
+                        {[1, 2, 3, 4].map((c) => (
+                          <option key={c} value={c}>
+                            {c} курс
+                          </option>
+                        ))}
+                      </SelectField>
+                    </Field>
                   </div>
+                  <Field label="Статус" htmlFor="reg-role">
+                    <SelectField id="reg-role" value={regRole} onChange={(v) => setRegRole(v as UserRole)}>
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </SelectField>
+                  </Field>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      Статус
-                    </label>
-                    <select
-                      value={regRole}
-                      onChange={(e) => setRegRole(e.target.value as UserRole)}
-                      className="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                    >
-                      <option value="Студент">Студент</option>
-                      <option value="Староста">Староста</option>
-                      <option value="Иностранный студент">Иностранный студент</option>
-                    </select>
-                  </div>
-
-                  {regError && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2"
-                    >
-                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                      <span>{regError}</span>
-                    </motion.div>
-                  )}
+                  <AnimatePresence>{regError && <ErrorNote text={regError} />}</AnimatePresence>
 
                   <button
                     type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm py-3 px-4 rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    className="pressable mt-1 w-full rounded-xl bg-blue-600 px-4 py-3 text-[15px] font-medium text-white shadow-lg shadow-blue-600/25 hover:bg-blue-500"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    Зарегистрироваться
+                    Создать аккаунт
                   </button>
                 </form>
               </motion.div>
             )}
           </AnimatePresence>
         </motion.div>
+        </motion.div>
 
-        {/* Демо-плашка для быстрого входа */}
-        {screen === 'credentials' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-6 bg-slate-800/60 border border-slate-700/50 rounded-xl p-4"
-          >
-            <p className="text-[11px] text-slate-400 mb-3 text-center font-medium">
-              Быстрый вход для демонстрации (тестовые сценарии)
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {DEMO_ACCOUNTS.map((demo) => (
-                <button
-                  key={demo.email}
-                  type="button"
-                  onClick={() => handleDemoLogin(demo.email, demo.password)}
-                  className="text-xs bg-slate-900/80 hover:bg-slate-700 border border-slate-600/50 text-slate-300 hover:text-white rounded-lg px-3 py-2 transition-all active:scale-95 font-medium"
-                >
-                  <span className="mr-1.5">{demo.badge}</span>
-                  {demo.label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {screen === 'credentials' && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+              className="mt-6"
+            >
+              <p className="mb-2 px-1 text-xs text-slate-500">Демо-аккаунты: нажмите, чтобы подставить данные</p>
+              <div className="overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.08]">
+                {DEMO_ACCOUNTS.map((demo, index) => {
+                  const active = loginEmail === demo.email;
+                  return (
+                    <button
+                      key={demo.email}
+                      type="button"
+                      onClick={() => handleDemoLogin(demo.email, demo.password)}
+                      className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] ${index > 0 ? 'border-t border-white/[0.06]' : ''}`}
+                    >
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold ${demo.tone}`}>{demo.initials}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-slate-100">{demo.name}</span>
+                        <span className="block text-xs text-slate-500">{demo.hint}</span>
+                      </span>
+                      <AnimatePresence>
+                        {active && (
+                          <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-slate-900">
+                            <Check className="h-3 w-3" strokeWidth={3} />
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Footer */}
-      <footer className="w-full max-w-md border-t border-slate-800 pb-2 pt-4 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-indigo-950/60 px-3 py-1.5 text-[11px] text-slate-300">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
-          <span>Защищено по стандарту 152-ФЗ · Шифрование TLS 1.3</span>
-        </div>
+      <footer className="relative mx-auto flex w-full max-w-sm items-center justify-center gap-2 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-xs text-slate-500">
+        <ShieldCheck className="h-4 w-4 text-emerald-500/80" />
+        Данные защищены по 152-ФЗ, соединение TLS 1.3
       </footer>
     </div>
   );

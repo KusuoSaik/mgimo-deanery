@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { CheckCircle2, FileText } from 'lucide-react';
+import { FileText, Send } from 'lucide-react';
 
 interface ActionableAICardProps {
   action: {
@@ -16,33 +16,30 @@ export const ActionableAICard = ({ action, onConfirm }: ActionableAICardProps) =
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="mt-3 p-3 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="mt-3 overflow-hidden rounded-xl bg-slate-50 ring-1 ring-inset ring-slate-200"
     >
-      <div className="flex items-start gap-2 mb-2">
-        <FileText className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <p className="text-xs font-semibold text-slate-900">{action.title}</p>
-          <p className="text-[10px] text-slate-600 mt-0.5">
-            {action.category} • {action.deliveryFormat}
+      <div className="flex items-start gap-2.5 p-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+          <FileText className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold leading-snug text-slate-900">{action.title}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {action.category}, {action.deliveryFormat}
           </p>
         </div>
       </div>
-
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
+      <button
+        type="button"
         onClick={onConfirm}
-        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-all"
+        className="pressable flex w-full items-center justify-center gap-1.5 border-t border-slate-200 bg-white px-3 py-2.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50"
       >
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        Подтвердить и отправить в 1 клик
-      </motion.button>
-
-      <p className="text-[9px] text-slate-500 mt-1.5 text-center">
-        Заявка будет сохранена в ваш список заявок
-      </p>
+        <Send className="h-3.5 w-3.5" />
+        Отправить заявку
+      </button>
     </motion.div>
   );
 };

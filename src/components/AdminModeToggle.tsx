@@ -1,5 +1,4 @@
-import { motion } from 'framer-motion';
-import { BarChart3, Users } from 'lucide-react';
+import { Segmented } from './ui/primitives';
 
 interface AdminModeToggleProps {
   isAdminMode: boolean;
@@ -8,27 +7,17 @@ interface AdminModeToggleProps {
 
 export const AdminModeToggle = ({ isAdminMode, onToggle }: AdminModeToggleProps) => {
   return (
-    <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={() => onToggle(!isAdminMode)}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-        isAdminMode
-          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
-          : 'bg-blue-600 hover:bg-blue-700 text-white'
-      }`}
-    >
-      {isAdminMode ? (
-        <>
-          <BarChart3 className="h-5 w-5" />
-          🏛️ Пульт деканата
-        </>
-      ) : (
-        <>
-          <Users className="h-5 w-5" />
-          👨‍🎓 Кабинет студента
-        </>
-      )}
-    </motion.button>
+    <Segmented
+      id="mode"
+      tone="dark"
+      size="sm"
+      className="w-[184px]"
+      value={isAdminMode ? 'admin' : 'student'}
+      onChange={(value) => onToggle(value === 'admin')}
+      options={[
+        { value: 'student', label: 'Студент' },
+        { value: 'admin', label: 'Деканат' },
+      ]}
+    />
   );
 };
