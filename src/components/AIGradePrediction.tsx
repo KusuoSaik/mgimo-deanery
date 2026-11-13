@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Award, ChevronDown, Sparkles, Target, TrendingUp, TriangleAlert } from 'lucide-react';
+import { Award, CalendarCheck, Check, ChevronDown, Sparkles, Target, TrendingUp, TriangleAlert } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { GradeItem, UserProfile } from '../types';
+import { BottomSheet } from './BottomSheet';
 import { CountUp } from './ui/primitives';
 
 interface AIGradePredictionProps {
@@ -20,6 +21,9 @@ function points(n: number): string {
 
 export const AIGradePrediction = ({ user, grades }: AIGradePredictionProps) => {
   const [expanded, setExpanded] = useState(true);
+  const [sheet, setSheet] = useState<'consultation' | 'plan' | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [booked, setBooked] = useState(false);
   const weakest = [...grades].sort((a, b) => a.brsPoints - b.brsPoints)[0];
   const atRiskCount = grades.filter((g) => g.status === 'Требует внимания').length;
 
@@ -121,10 +125,10 @@ export const AIGradePrediction = ({ user, grades }: AIGradePredictionProps) => {
               ))}
             </ul>
             <div className="grid grid-cols-2 gap-2 p-4">
-              <button type="button" className="pressable rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
+              <button type="button" onClick={() => setSheet('consultation')} className="pressable rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
                 Консультация
               </button>
-              <button type="button" className="pressable rounded-xl bg-slate-100 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
+              <button type="button" onClick={() => setSheet('plan')} className="pressable rounded-xl bg-slate-100 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
                 План действий
               </button>
             </div>
@@ -135,6 +139,74 @@ export const AIGradePrediction = ({ user, grades }: AIGradePredictionProps) => {
         )}
       </AnimatePresence>
       {!expanded && <div className="h-4" />}
+
+      <BottomSheet
+        isOpen={sheet !== null}
+        onClose={() => {
+          setSheet(null);
+          setSelectedSlot(null);
+          setBooked(false);
+        }}
+        title={sheet === 'consultation' ? 'Записаться на консультацию' : 'Персональный план действий'}
+        subtitle={weakest ? weakest.subject : 'По вашим результатам БРС'}
+      >
+        {sheet === 'consultation' ? (
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-slate-600">
+              Выберите удобное окно консультации по дисциплине «{weakest?.subject ?? 'предмет'}».
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: '2026-11-15', day: '15 ноя', time: '14:00' },
+                { id: '2026-11-16', day: '16 ноя', time: '10:00' },
+                { id: '2026-11-17', day: '17 ноя', time: '15:00' },
+              ].map((slot) => {
+                const active = selectedSlot === slot.id;
+                return (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    disabled={booked}
+                    onClick={() => setSelectedSlot(slot.id)}
+                    className={`rounded-xl px-2 py-2.5 text-center text-sm transition-colors ${active ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    <span className="block font-semibold">{slot.day}</span>
+                    <span className={active ? 'text-blue-100' : 'text-slate-500'}>{slot.time}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              disabled={!selectedSlot || booked}
+              onClick={() => setBooked(true)}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white ${booked ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/40'}`}
+            >
+              {booked ? <Check className="h-4 w-4" /> : <CalendarCheck className="h-4 w-4" />}
+              {booked ? 'Вы записаны' : 'Записаться'}
+            </button>
+            {booked && <p className="text-center text-xs text-emerald-600">Запись сохранена в вашем учебном кабинете.</p>}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-slate-600">Чтобы повысить результат, двигайтесь по шагам:</p>
+            {(weakest
+              ? [
+                  `Повторить ключевые темы по дисциплине «${weakest.subject}»`,
+                  `Выполнить дополнительные задания и поднять результат минимум на ${brsIncrease} ${points(brsIncrease)}`,
+                  'Прийти на консультацию и уточнить ошибки у преподавателя',
+                  'Проверить результат после следующего начисления баллов',
+                ]
+              : ['Регулярно проверять оценки и баллы БРС', 'Не пропускать семинары и сдавать работы вовремя', 'При необходимости записаться на консультацию']
+            ).map((step, index) => (
+              <div key={step} className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">{index + 1}</span>
+                <p className="pt-0.5 text-sm text-slate-700">{step}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </BottomSheet>
     </motion.section>
   );
 };
