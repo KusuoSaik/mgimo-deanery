@@ -248,9 +248,9 @@ export default function App() {
               <AiAssistantView
                 user={userProfile}
                 grades={grades}
+                schedule={schedule}
                 requests={requests}
                 onAddRequest={handleAddRequest}
-                onNavigateToRequests={() => setActiveTab('requests')}
               />
             )}
             {activeTab === 'profile' && (

@@ -24,6 +24,7 @@ export const mockUser: UserProfile = {
   phone: '+7 (903) 214-58-76',
   passport: '4519 638274',
   snils: '164-582-739 98',
+  role: 'Студент',
 };
 
 export const mockSchedule: ScheduleItem[] = [

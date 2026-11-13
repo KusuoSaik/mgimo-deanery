@@ -14,6 +14,7 @@ export interface UserProfile {
   phone: string;          // для маскирования и автозаполнения
   passport: string;       // для маскирования (152-ФЗ) и автозаполнения заявок
   snils: string;          // для маскирования (152-ФЗ)
+  role?: 'Студент' | 'Староста' | 'Иностранный студент'; // Роль студента
 }
 
 export interface ScheduleItem {
