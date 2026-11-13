@@ -53,10 +53,22 @@ export interface RequestItem {
   title: string;
   category: 'Справки' | 'Военкомат' | 'Финансы и матпомощь' | 'Академические';
   deliveryFormat: 'Электронная с ЭЦП (PDF)' | 'Бумажный оригинал в деканате';
-  status: 'Создано' | 'Проверка деканатом' | 'Подписано ЭЦП' | 'Готово';
+  status: 'Зарегистрирована в СЭД' | 'На проверке' | 'На подписи' | 'Подписано' | 'Готово к выдаче';
+  stage: 1 | 2 | 3 | 4 | 5; // 1-5 этапы жизненного цикла
   createdAt: string;
+  updatedAt?: string;
   comment?: string;
   verificationQrCode?: string; // токен проверки подлинности справки
+  // Временные метки этапов
+  timestamps?: {
+    registered?: string;   // Зарегистрирована
+    inReview?: string;     // На проверке
+    inSigning?: string;    // На подписи
+    signed?: string;       // Подписано
+    ready?: string;        // Готово
+  };
+  reason?: string;         // Причина создания заявки
+  docType?: string;        // Тип документа (для справок)
 }
 
 export interface ChatMessage {

@@ -56,9 +56,9 @@ export const mockNotifications: NotificationItem[] = [
 ];
 
 export const mockRequests: RequestItem[] = [
-  { id: 'req-1', title: 'Справка об обучении для стажировки', category: 'Справки', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Создано', createdAt: '09.11.2026', comment: 'Нужна для отдела стажировок МИД, с указанием курса и формы обучения.' },
-  { id: 'req-2', title: 'Справка для военного комиссариата', category: 'Военкомат', deliveryFormat: 'Бумажный оригинал в деканате', status: 'Проверка деканатом', createdAt: '02.11.2026', comment: 'Приложение № 2, очная форма, отсрочка на 2026/27 учебный год.' },
-  { id: 'req-3', title: 'Справка о стипендии для материальной помощи', category: 'Финансы и матпомощь', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Готово', createdAt: '28.10.2026', comment: 'За осенний семестр, с указанием размера академической стипендии.', verificationQrCode: 'MGIMO-SPR-7F3A-2026' },
+  { id: 'req-1', title: 'Справка об обучении для стажировки', category: 'Справки', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'На подписи', stage: 3, createdAt: '09.11.2026', updatedAt: '12.11.2026', comment: 'Нужна для отдела стажировок МИД, с указанием курса и формы обучения.' },
+  { id: 'req-2', title: 'Справка для военного комиссариата', category: 'Военкомат', deliveryFormat: 'Бумажный оригинал в деканате', status: 'На проверке', stage: 2, createdAt: '02.11.2026', updatedAt: '11.11.2026', comment: 'Приложение № 2, очная форма, отсрочка на 2026/27 учебный год.' },
+  { id: 'req-3', title: 'Справка о стипендии для материальной помощи', category: 'Финансы и матпомощь', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Готово к выдаче', stage: 5, createdAt: '28.10.2026', updatedAt: '10.11.2026', comment: 'За осенний семестр, с указанием размера академической стипендии.', verificationQrCode: 'MGIMO-SPR-7F3A-2026' },
 ];
 
 export const initialChatMessages: ChatMessage[] = [

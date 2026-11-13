@@ -27,10 +27,11 @@ type DashboardViewProps = {
 };
 
 const REQUEST_STATUS: Record<RequestItem['status'], string> = {
-  Создано: 'bg-slate-100 text-slate-600 border-slate-200',
-  'Проверка деканатом': 'bg-amber-50 text-amber-700 border-amber-200',
-  'Подписано ЭЦП': 'bg-blue-50 text-blue-700 border-blue-200',
-  Готово: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Зарегистрирована в СЭД': 'bg-blue-100 text-blue-700 border-blue-200',
+  'На проверке': 'bg-amber-100 text-amber-700 border-amber-200',
+  'На подписи': 'bg-purple-100 text-purple-700 border-purple-200',
+  'Подписано': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  'Готово к выдаче': 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
 
 const NOTIFICATION_STYLE: Record<NotificationItem['type'], { icon: LucideIcon; wrap: string }> = {
@@ -91,7 +92,7 @@ export default function DashboardView({
     { label: 'Зачётка', tab: 'grades' as const, icon: GraduationCap, color: 'bg-indigo-50 text-indigo-600' },
     { label: 'Профиль', tab: 'profile' as const, icon: IdCard, color: 'bg-slate-900 text-amber-400' },
   ].filter((item) => item.label.toLowerCase().includes(serviceSearch.toLowerCase()));
-  const activeRequests = requests.filter((item) => item.status !== 'Готово');
+  const activeRequests = requests.filter((item) => item.stage !== 5);
   const live = upcoming ? now.getTime() >= upcoming.start.getTime() : false;
   const countdown = upcoming
     ? formatCountdown((live ? upcoming.end.getTime() : upcoming.start.getTime()) - now.getTime())

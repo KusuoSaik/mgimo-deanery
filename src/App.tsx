@@ -167,8 +167,8 @@ export default function App() {
 
   function handleDemoCompleteRequest() {
     setRequests((current) => {
-      const target = current.find((item) => item.status !== 'Готово');
-      return target ? current.map((item) => item.id === target.id ? { ...item, status: 'Готово' } : item) : current;
+      const target = current.find((item) => item.stage !== 5);
+      return target ? current.map((item) => item.id === target.id ? { ...item, stage: 5, status: 'Готово к выдаче' } : item) : current;
     });
   }
 
@@ -178,17 +178,24 @@ export default function App() {
       ...req,
       id: `req-${crypto.randomUUID()}`,
       createdAt: new Intl.DateTimeFormat('ru-RU').format(now),
-      status: 'Проверка деканатом',
+      stage: 1,
+      status: 'Зарегистрирована в СЭД',
     };
     setRequests((current) => [created, ...current]);
     setNotifications((current) => [{
       id: `nt-${crypto.randomUUID()}`,
-      title: 'Заявка принята в обработку деканатом',
-      message: `Заявка «${created.title}» принята в обработку деканатом.`,
+      title: 'Заявка зарегистрирована в СЭД',
+      message: `Заявка «${created.title}» зарегистрирована в системе электронного документооборота.`,
       date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(now),
       type: 'success',
       isRead: false,
     }, ...current]);
+  }
+
+  function handleUpdateRequest(updatedRequest: RequestItem) {
+    setRequests((current) =>
+      current.map((item) => (item.id === updatedRequest.id ? updatedRequest : item)),
+    );
   }
 
   function handleMarkNotificationRead(id: string) {
@@ -242,7 +249,7 @@ export default function App() {
             {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
             {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
             {activeTab === 'requests' && (
-              <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} />
+              <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />
             )}
             {activeTab === 'ai' && (
               <AiAssistantView

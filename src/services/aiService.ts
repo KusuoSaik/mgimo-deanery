@@ -112,9 +112,9 @@ ${schedule
 
 ## ТЕКУЩИЕ ЗАЯВКИ И УВЕДОМЛЕНИЯ
 
-**Активные заявки:** ${requests.filter((r) => r.status !== 'Готово').length}
+**Активные заявки:** ${requests.filter((r) => r.stage !== 5).length}
 ${requests
-  .filter((r) => r.status !== 'Готово')
+  .filter((r) => r.stage !== 5)
   .map((r) => `- ${r.title} (${r.status})`)
   .join('\n')}
 

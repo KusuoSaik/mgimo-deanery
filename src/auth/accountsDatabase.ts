@@ -47,8 +47,8 @@ const alekseyVolkovAccount: StoredAccount = {
     { id: 'gr-av-6', subject: 'Международное частное право', brsPoints: 89, maxPoints: 100, status: 'Штатно', professor: 'Белова Наталья Андреевна', examType: 'Экзамен' },
   ] as GradeItem[],
   requestsData: [
-    { id: 'req-av-1', title: 'Характеристика для стажировки в МИД', category: 'Справки', deliveryFormat: 'Бумажный оригинал в деканате', status: 'Проверка деканатом', createdAt: '10.11.2026', comment: 'Для подачи документов на стажировку в Департамент международных организаций МИД РФ.' },
-    { id: 'req-av-2', title: 'Справка об успеваемости с отличием', category: 'Справки', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Подписано ЭЦП', createdAt: '05.11.2026', comment: 'С указанием среднего балла 4.92 для конкурса на грант.', verificationQrCode: 'MGIMO-AVG-8D2F-2026' },
+    { id: 'req-av-1', title: 'Характеристика для стажировки в МИД', category: 'Справки', deliveryFormat: 'Бумажный оригинал в деканате', status: 'На проверке', stage: 2, createdAt: '10.11.2026', comment: 'Для подачи документов на стажировку в Департамент международных организаций МИД РФ.' },
+    { id: 'req-av-2', title: 'Справка об успеваемости с отличием', category: 'Справки', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Подписано', stage: 4, createdAt: '05.11.2026', comment: 'С указанием среднего балла 4.92 для конкурса на грант.', verificationQrCode: 'MGIMO-AVG-8D2F-2026' },
   ] as RequestItem[],
   notificationsData: [
     { id: 'nt-av-1', title: 'Собрание старост факультета МП', message: 'Завтра в 15:00, каб. 420. Обсуждение организации зимней сессии и распределения аудиторий.', date: '12 ноября', type: 'info', isRead: false },
@@ -98,8 +98,8 @@ const dmitriySokolovAccount: StoredAccount = {
     { id: 'gr-ds-5', subject: 'Английский язык', brsPoints: 54, maxPoints: 100, status: 'Штатно', professor: 'Смит Джон', examType: 'Зачет' },
   ] as GradeItem[],
   requestsData: [
-    { id: 'req-ds-1', title: 'Направление на пересдачу с комиссией (Микроэкономика)', category: 'Академические', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Подписано ЭЦП', createdAt: '08.11.2026', comment: 'Согласовано с деканатом. Дата пересдачи: 17 ноября 2026, 09:00, ауд. 102.', verificationQrCode: 'MGIMO-RET-5B8C-2026' },
-    { id: 'req-ds-2', title: 'Справка об обучении', category: 'Справки', deliveryFormat: 'Бумажный оригинал в деканате', status: 'Готово', createdAt: '01.11.2026' },
+    { id: 'req-ds-1', title: 'Направление на пересдачу с комиссией (Микроэкономика)', category: 'Академические', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Подписано', stage: 4, createdAt: '08.11.2026', comment: 'Согласовано с деканатом. Дата пересдачи: 17 ноября 2026, 09:00, ауд. 102.', verificationQrCode: 'MGIMO-RET-5B8C-2026' },
+    { id: 'req-ds-2', title: 'Справка об обучении', category: 'Справки', deliveryFormat: 'Бумажный оригинал в деканате', status: 'Готово к выдаче', stage: 5, createdAt: '01.11.2026' },
   ] as RequestItem[],
   notificationsData: [
     { id: 'nt-ds-1', title: '⚠️ Академическая задолженность', message: 'Внимание! Академическая задолженность по дисциплине "Микроэкономика" (БРС: 38/100). До пересдачи осталось 4 дня. Рекомендуем записаться на консультацию к преподавателю.', date: '13 ноября', type: 'warning', isRead: false },
@@ -149,8 +149,8 @@ const sofiaChenAccount: StoredAccount = {
     { id: 'gr-sc-5', subject: 'Английский язык', brsPoints: 74, maxPoints: 100, status: 'Штатно', professor: 'Браун Майкл', examType: 'Зачет' },
   ] as GradeItem[],
   requestsData: [
-    { id: 'req-sc-1', title: 'Справка для продления студенческой визы', category: 'Справки', deliveryFormat: 'Бумажный оригинал в деканате', status: 'Проверка деканатом', createdAt: '11.11.2026', comment: 'Для подачи в ГУВМ МВД РФ. С указанием срока обучения и формы (очная, бюджет).' },
-    { id: 'req-sc-2', title: 'Подтверждение зачисления для посольства КНР', category: 'Справки', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Готово', createdAt: '28.10.2026', verificationQrCode: 'MGIMO-FOR-3E9A-2026' },
+    { id: 'req-sc-1', title: 'Справка для продления студенческой визы', category: 'Справки', deliveryFormat: 'Бумажный оригинал в деканате', status: 'На проверке', stage: 2, createdAt: '11.11.2026', comment: 'Для подачи в ГУВМ МВД РФ. С указанием срока обучения и формы (очная, бюджет).' },
+    { id: 'req-sc-2', title: 'Подтверждение зачисления для посольства КНР', category: 'Справки', deliveryFormat: 'Электронная с ЭЦП (PDF)', status: 'Готово к выдаче', stage: 5, createdAt: '28.10.2026', verificationQrCode: 'MGIMO-FOR-3E9A-2026' },
   ] as RequestItem[],
   notificationsData: [
     { id: 'nt-sc-1', title: '🌍 Продление визы — важные сроки', message: 'До окончания вашей студенческой визы осталось 28 дней. Рекомендуем подать документы на продление в Международное управление (каб. 215) в ближайшие 7 дней.', date: '12 ноября', type: 'warning', isRead: false },
