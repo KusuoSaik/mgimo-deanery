@@ -1,29 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import type { UserProfile } from '../types';
-import { 
-  ShieldCheck, 
-  Eye, 
-  EyeOff, 
-  QrCode, 
+import type { StoredAccount } from '../auth/types';
+import {
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  QrCode,
   Smartphone,
   LogOut,
   RotateCcw,
   Lock,
-  GraduationCap, 
-  Bot, 
-  Clock
+  GraduationCap,
+  Bot,
+  Clock,
+  ArrowRightLeft,
 } from 'lucide-react';
+import { getAllAccounts } from '../auth/authService';
 
 export interface ProfileViewProps {
   user: UserProfile;
+  account: StoredAccount;
   onLogout: () => void;
+  onSwitchAccount: (account: StoredAccount) => void;
   onResetDemoData: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onResetDemoData }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogout, onSwitchAccount, onResetDemoData }) => {
   const [privacyMode, setPrivacyMode] = useState<boolean>(true);
   const [qrCounter, setQrCounter] = useState<number>(60);
   const [qrToken, setQrToken] = useState<string>('MGIMO-PASS-8841');
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const allAccounts = getAllAccounts();
+  const otherAccounts = allAccounts.filter(acc => acc.id !== account.id);
 
   // Таймер ротации QR-кода турникета (каждые 60 секунд)
   useEffect(() => {
@@ -222,6 +230,39 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onRese
         </section>
 
         <div className="space-y-2">
+          {otherAccounts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-900/30 bg-indigo-950/40 px-4 py-3 text-xs font-medium text-indigo-400 transition-all hover:border-indigo-700/50 hover:bg-indigo-900/40"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              Переключить аккаунт
+            </button>
+          )}
+
+          {showAccountSwitcher && otherAccounts.length > 0 && (
+            <div className="rounded-xl border border-slate-700/60 bg-slate-800/70 p-3 space-y-2">
+              <p className="text-[11px] font-semibold uppercase text-slate-400 px-2">Другие аккаунты</p>
+              {otherAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => {
+                    onSwitchAccount(acc);
+                    setShowAccountSwitcher(false);
+                  }}
+                  className="w-full rounded-lg border border-slate-700/30 bg-slate-900/60 hover:bg-slate-700/60 px-3 py-2 text-left transition-all text-xs"
+                >
+                  <div className="font-medium text-slate-200">{acc.profile.name}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    {acc.profile.course} курс · {acc.profile.group}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={onResetDemoData}

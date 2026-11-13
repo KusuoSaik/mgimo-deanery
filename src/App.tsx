@@ -3,12 +3,13 @@ import { CalendarDays, ChartColumn, ClipboardList, House, Sparkles, UserRound } 
 import AiAssistantView from './components/AiAssistantView';
 import DashboardView from './components/DashboardView';
 import GradesView from './components/GradesView';
-import { LoginScreen } from './components/LoginScreen';
+import { LoginScreen } from './components/auth/LoginScreen';
 import { ProfileView } from './components/ProfileView';
 import RequestsView from './components/RequestsView';
 import ScheduleView from './components/ScheduleView';
-import { mockGrades, mockNotifications, mockRequests, mockSchedule, mockUser } from './mockData';
-import type { NotificationItem, RequestItem, TabType } from './types';
+import type { NotificationItem, RequestItem, TabType, UserProfile, ScheduleItem, GradeItem, ChatMessage } from './types';
+import { getCurrentUser, isAuthenticated, logout } from './auth/authService';
+import type { StoredAccount } from './auth/types';
 
 const TABS: { id: TabType; label: string; icon: typeof House }[] = [
   { id: 'dashboard', label: 'Главная', icon: House },
@@ -55,30 +56,113 @@ function loadStored<T>(key: string, fallback: T): T {
   }
 }
 
+// Конвертер StoredAccount в UserProfile
+function accountToUserProfile(account: StoredAccount): UserProfile {
+  return account.profile;
+}
+
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => isAuthenticated());
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [requests, setRequests] = useState<RequestItem[]>(() => loadStored('mgimo_requests_v2', mockRequests));
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadStored('mgimo_notifications_v2', mockNotifications));
+  const [currentAccount, setCurrentAccount] = useState<StoredAccount | null>(() => getCurrentUser());
+  const [requests, setRequests] = useState<RequestItem[]>(() => {
+    const account = getCurrentUser();
+    if (account) {
+      return loadStored(`mgimo_requests_${account.id}`, account.requestsData);
+    }
+    return [];
+  });
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    const account = getCurrentUser();
+    if (account) {
+      return loadStored(`mgimo_notifications_${account.id}`, account.notificationsData);
+    }
+    return [];
+  });
+  const [schedule, setSchedule] = useState<ScheduleItem[]>(() => {
+    const account = getCurrentUser();
+    if (account) {
+      return loadStored(`mgimo_schedule_${account.id}`, account.scheduleData);
+    }
+    return [];
+  });
+  const [grades, setGrades] = useState<GradeItem[]>(() => {
+    const account = getCurrentUser();
+    if (account) {
+      return loadStored(`mgimo_grades_${account.id}`, account.gradesData);
+    }
+    return [];
+  });
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
+    const account = getCurrentUser();
+    if (account) {
+      return loadStored(`mgimo_chat_${account.id}`, account.chatHistoryData);
+    }
+    return [];
+  });
+
+  // Синхронизация данных при смене аккаунта
+  useEffect(() => {
+    const account = getCurrentUser();
+    if (account) {
+      setCurrentAccount(account);
+      setIsLoggedIn(true);
+      setRequests(loadStored(`mgimo_requests_${account.id}`, account.requestsData));
+      setNotifications(loadStored(`mgimo_notifications_${account.id}`, account.notificationsData));
+      setSchedule(loadStored(`mgimo_schedule_${account.id}`, account.scheduleData));
+      setGrades(loadStored(`mgimo_grades_${account.id}`, account.gradesData));
+      setChatHistory(loadStored(`mgimo_chat_${account.id}`, account.chatHistoryData));
+    } else {
+      setCurrentAccount(null);
+      setIsLoggedIn(false);
+    }
+  }, [isLoggedIn]);
+
+  // Сохранение данных в localStorage
+  useEffect(() => {
+    if (currentAccount) {
+      localStorage.setItem(`mgimo_requests_${currentAccount.id}`, JSON.stringify(requests));
+    }
+  }, [requests, currentAccount]);
 
   useEffect(() => {
-    localStorage.setItem('mgimo_requests_v2', JSON.stringify(requests));
-  }, [requests]);
+    if (currentAccount) {
+      localStorage.setItem(`mgimo_notifications_${currentAccount.id}`, JSON.stringify(notifications));
+    }
+  }, [notifications, currentAccount]);
 
   useEffect(() => {
-    localStorage.setItem('mgimo_notifications_v2', JSON.stringify(notifications));
-  }, [notifications]);
+    if (currentAccount) {
+      localStorage.setItem(`mgimo_schedule_${currentAccount.id}`, JSON.stringify(schedule));
+    }
+  }, [schedule, currentAccount]);
+
+  useEffect(() => {
+    if (currentAccount) {
+      localStorage.setItem(`mgimo_grades_${currentAccount.id}`, JSON.stringify(grades));
+    }
+  }, [grades, currentAccount]);
+
+  useEffect(() => {
+    if (currentAccount) {
+      localStorage.setItem(`mgimo_chat_${currentAccount.id}`, JSON.stringify(chatHistory));
+    }
+  }, [chatHistory, currentAccount]);
 
   function handleMarkAllNotificationsRead() {
     setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
   }
 
   function handleResetDemoData() {
-    if (!window.confirm('Сбросить заявки и уведомления к исходным демо-данным?')) return;
+    if (!window.confirm('Сбросить все данные к исходным для текущего аккаунта?')) return;
 
-    localStorage.clear();
-    setRequests(mockRequests);
-    setNotifications(mockNotifications);
+    if (currentAccount) {
+      setRequests(currentAccount.requestsData);
+      setNotifications(currentAccount.notificationsData);
+      setSchedule(currentAccount.scheduleData);
+      setGrades(currentAccount.gradesData);
+      setChatHistory(currentAccount.chatHistoryData);
+    }
   }
 
   function handleDemoCompleteRequest() {
@@ -113,15 +197,40 @@ export default function App() {
     );
   }
 
+  function handleLogout() {
+    logout();
+    setIsLoggedIn(false);
+    setCurrentAccount(null);
+    setActiveTab('dashboard');
+  }
+
+  function handleSwitchAccount(newAccount: StoredAccount) {
+    // Сохраняем текущие данные перед переключением
+    if (currentAccount) {
+      localStorage.setItem(`mgimo_requests_${currentAccount.id}`, JSON.stringify(requests));
+      localStorage.setItem(`mgimo_notifications_${currentAccount.id}`, JSON.stringify(notifications));
+    }
+
+    // Загружаем данные нового аккаунта
+    setCurrentAccount(newAccount);
+    setRequests(loadStored(`mgimo_requests_${newAccount.id}`, newAccount.requestsData));
+    setNotifications(loadStored(`mgimo_notifications_${newAccount.id}`, newAccount.notificationsData));
+    setSchedule(loadStored(`mgimo_schedule_${newAccount.id}`, newAccount.scheduleData));
+    setGrades(loadStored(`mgimo_grades_${newAccount.id}`, newAccount.gradesData));
+    setChatHistory(loadStored(`mgimo_chat_${newAccount.id}`, newAccount.chatHistoryData));
+  }
+
+  const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
+
   return (
     <div className="min-h-screen bg-slate-200">
       <div className="max-w-md mx-auto min-h-screen bg-slate-50 shadow-2xl relative">
-        {isLoggedIn ? (
+        {isLoggedIn && currentAccount && userProfile ? (
           <>
             {activeTab === 'dashboard' && (
               <DashboardView
-                user={mockUser}
-                schedule={mockSchedule}
+                user={userProfile}
+                schedule={schedule}
                 notifications={notifications}
                 requests={requests}
                 onNavigate={setActiveTab}
@@ -130,15 +239,15 @@ export default function App() {
                 onDemoCompleteRequest={handleDemoCompleteRequest}
               />
             )}
-            {activeTab === 'schedule' && <ScheduleView schedule={mockSchedule} />}
-            {activeTab === 'grades' && <GradesView user={mockUser} grades={mockGrades} />}
+            {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
+            {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
             {activeTab === 'requests' && (
-              <RequestsView user={mockUser} requests={requests} onAddRequest={handleAddRequest} />
+              <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} />
             )}
             {activeTab === 'ai' && (
               <AiAssistantView
-                user={mockUser}
-                grades={mockGrades}
+                user={userProfile}
+                grades={grades}
                 requests={requests}
                 onAddRequest={handleAddRequest}
                 onNavigateToRequests={() => setActiveTab('requests')}
@@ -146,8 +255,10 @@ export default function App() {
             )}
             {activeTab === 'profile' && (
               <ProfileView
-                user={mockUser}
-                onLogout={() => setIsLoggedIn(false)}
+                user={userProfile}
+                account={currentAccount}
+                onLogout={handleLogout}
+                onSwitchAccount={handleSwitchAccount}
                 onResetDemoData={handleResetDemoData}
               />
             )}
@@ -156,8 +267,12 @@ export default function App() {
         ) : (
           <LoginScreen
             onLoginSuccess={() => {
-              setIsLoggedIn(true);
-              setActiveTab('dashboard');
+              const user = getCurrentUser();
+              if (user) {
+                setCurrentAccount(user);
+                setIsLoggedIn(true);
+                setActiveTab('dashboard');
+              }
             }}
           />
         )}
