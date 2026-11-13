@@ -31,6 +31,7 @@ function detectApiProvider(apiKey: string): string {
   if (apiKey.startsWith('AIza')) return 'gemini';
   if (apiKey.startsWith('sk-or-')) return 'openrouter';
   if (apiKey.startsWith('gsk_')) return 'groq';
+  if (apiKey.startsWith('sk_live_')) return 'xyvero';
   return 'unknown';
 }
 
@@ -107,6 +108,27 @@ async function callGroq(apiKey: string, messages: ChatMessage[], systemPrompt: s
   return data.choices?.[0]?.message?.content || '';
 }
 
+async function callXyvero(apiKey: string, messages: ChatMessage[], systemPrompt: string): Promise<string> {
+  const response = await fetch('https://api.xyvero.space/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'gemini-3.8-flash',
+      system: systemPrompt,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      temperature: 0.7,
+      max_tokens: 500,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Xyvero API error: ${response.status} - ${error}`);
+  }
+  const data = (await response.json()) as any;
+  return data.choices?.[0]?.message?.content || '';
+}
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, studentData } = req.body as ChatRequest;
@@ -150,6 +172,8 @@ app.post('/api/chat', async (req, res) => {
         aiResponse = await callOpenRouter(apiKey, messages, systemPrompt);
       } else if (provider === 'groq') {
         aiResponse = await callGroq(apiKey, messages, systemPrompt);
+      } else if (provider === 'xyvero') {
+        aiResponse = await callXyvero(apiKey, messages, systemPrompt);
       }
     } catch (apiError) {
       console.error('❌ API call failed:', apiError);

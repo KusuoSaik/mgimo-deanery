@@ -42,7 +42,7 @@ export function loadAIConfig(): AIConfig {
 
   return {
     provider: 'google',
-    apiKey: import.meta.env.VITE_AI_API_KEY || '',
+    apiKey: '',
     model: 'gemini-2.0-flash',
   };
 }
