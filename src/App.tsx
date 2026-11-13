@@ -58,19 +58,27 @@ function loadStored<T>(key: string, fallback: T): T {
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [requests, setRequests] = useState<RequestItem[]>(() => loadStored('mgimo-requests', mockRequests));
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadStored('mgimo-notifications', mockNotifications));
+  const [requests, setRequests] = useState<RequestItem[]>(() => loadStored('mgimo_requests_v2', mockRequests));
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadStored('mgimo_notifications_v2', mockNotifications));
 
   useEffect(() => {
-    localStorage.setItem('mgimo-requests', JSON.stringify(requests));
+    localStorage.setItem('mgimo_requests_v2', JSON.stringify(requests));
   }, [requests]);
 
   useEffect(() => {
-    localStorage.setItem('mgimo-notifications', JSON.stringify(notifications));
+    localStorage.setItem('mgimo_notifications_v2', JSON.stringify(notifications));
   }, [notifications]);
 
   function handleMarkAllNotificationsRead() {
     setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+  }
+
+  function handleResetDemoData() {
+    if (!window.confirm('Сбросить заявки и уведомления к исходным демо-данным?')) return;
+
+    localStorage.clear();
+    setRequests(mockRequests);
+    setNotifications(mockNotifications);
   }
 
   function handleDemoCompleteRequest() {
@@ -80,14 +88,23 @@ export default function App() {
     });
   }
 
-  function handleAddRequest(req: Omit<RequestItem, 'id' | 'createdAt' | 'status'>) {
+  function handleAddRequest(req: Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>) {
+    const now = new Date();
     const created: RequestItem = {
       ...req,
       id: `req-${crypto.randomUUID()}`,
-      createdAt: new Intl.DateTimeFormat('ru-RU').format(new Date()),
-      status: 'Создано',
+      createdAt: new Intl.DateTimeFormat('ru-RU').format(now),
+      status: 'Проверка деканатом',
     };
     setRequests((current) => [created, ...current]);
+    setNotifications((current) => [{
+      id: `nt-${crypto.randomUUID()}`,
+      title: 'Заявка принята в обработку деканатом',
+      message: `Заявка «${created.title}» принята в обработку деканатом.`,
+      date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(now),
+      type: 'success',
+      isRead: false,
+    }, ...current]);
   }
 
   function handleMarkNotificationRead(id: string) {
@@ -127,7 +144,13 @@ export default function App() {
                 onNavigateToRequests={() => setActiveTab('requests')}
               />
             )}
-            {activeTab === 'profile' && <ProfileView user={mockUser} onLogout={() => setIsLoggedIn(false)} />}
+            {activeTab === 'profile' && (
+              <ProfileView
+                user={mockUser}
+                onLogout={() => setIsLoggedIn(false)}
+                onResetDemoData={handleResetDemoData}
+              />
+            )}
             <BottomNav activeTab={activeTab} onChange={setActiveTab} />
           </>
         ) : (

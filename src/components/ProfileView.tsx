@@ -5,9 +5,10 @@ import {
   Eye, 
   EyeOff, 
   QrCode, 
-  Smartphone, 
-  LogOut, 
-  Lock, 
+  Smartphone,
+  LogOut,
+  RotateCcw,
+  Lock,
   GraduationCap, 
   Bot, 
   Clock
@@ -16,9 +17,10 @@ import {
 export interface ProfileViewProps {
   user: UserProfile;
   onLogout: () => void;
+  onResetDemoData: () => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onResetDemoData }) => {
   const [privacyMode, setPrivacyMode] = useState<boolean>(true);
   const [qrCounter, setQrCounter] = useState<number>(60);
   const [qrToken, setQrToken] = useState<string>('MGIMO-PASS-8841');
@@ -240,15 +242,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* Кнопка выхода из аккаунта */}
-      <button
-        type="button"
-        onClick={onLogout}
-        className="w-full bg-slate-800/80 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-700/50 font-medium text-xs py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
-      >
-        <LogOut className="w-4 h-4" />
-        Выйти из аккаунта
-      </button>
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={onResetDemoData}
+          className="w-full bg-slate-800/80 hover:bg-amber-950/40 text-amber-400 border border-amber-900/30 hover:border-amber-700/50 font-medium text-xs py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Сбросить демо-данные
+        </button>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          className="w-full bg-slate-800/80 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-700/50 font-medium text-xs py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
+        >
+          <LogOut className="w-4 h-4" />
+          Выйти из аккаунта
+        </button>
+      </div>
 
     </div>
   );
