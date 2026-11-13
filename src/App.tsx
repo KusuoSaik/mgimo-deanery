@@ -13,7 +13,7 @@ import ScheduleView from './components/ScheduleView';
 import { AdminModeToggle } from './components/AdminModeToggle';
 import { AdminDashboard } from './components/AdminDashboard';
 import type { NotificationItem, RequestItem, TabType, UserProfile, ScheduleItem, GradeItem, ChatMessage } from './types';
-import { getCurrentUser, isAuthenticated, logout } from './auth/authService';
+import { getCurrentUser, getAllAccounts, isAuthenticated, logout } from './auth/authService';
 import type { StoredAccount } from './auth/types';
 
 const TABS: { id: TabType; label: string; icon: typeof House }[] = [
@@ -304,18 +304,26 @@ export default function App() {
     );
   }
 
-  function handleSendNotification(_studentId: string, message: string) {
-    setNotifications((current) => [
-      {
-        id: `nt-${crypto.randomUUID()}`,
-        title: 'Сообщение от деканата',
-        message,
-        date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date()),
-        type: 'warning',
-        isRead: false,
-      },
-      ...current,
-    ]);
+  function handleSendNotification(studentId: string, message: string) {
+    const notification: NotificationItem = {
+      id: `nt-${crypto.randomUUID()}`,
+      title: 'Сообщение от деканата',
+      message,
+      date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date()),
+      type: 'warning',
+      isRead: false,
+    };
+    const recipient = getAllAccounts().find((account) => account.profile.studentId === studentId);
+
+    if (!recipient) return;
+
+    const storageKey = `mgimo_notifications_${recipient.id}`;
+    const currentNotifications = loadStored<NotificationItem[]>(storageKey, recipient.notificationsData);
+    localStorage.setItem(storageKey, JSON.stringify([notification, ...currentNotifications]));
+
+    if (currentAccount?.id === recipient.id) {
+      setNotifications([notification, ...currentNotifications]);
+    }
   }
 
   const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
