@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  KeyRound, 
-  ArrowRight, 
-  RefreshCw, 
-  Smartphone, 
-  Building2 
+import { useEffect, useState } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
+import {
+  ArrowRight,
+  Building2,
+  KeyRound,
+  RefreshCw,
+  ShieldCheck,
+  Smartphone,
 } from 'lucide-react';
 
 export interface LoginScreenProps {
@@ -14,7 +15,7 @@ export interface LoginScreenProps {
 
 type AuthMethod = 'mgimo' | 'esia';
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
   const [step, setStep] = useState<'credentials' | '2fa'>('credentials');
   const [authMethod, setAuthMethod] = useState<AuthMethod>('mgimo');
   const [loginInput, setLoginInput] = useState('i.ivanov@my.mgimo.ru');
@@ -31,14 +32,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     return () => clearInterval(timer);
   }, [step, countdown]);
 
-  const handleInitialSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleInitialSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setStep('2fa');
   };
 
   const triggerVerification = () => {
     setIsVerifying(true);
-    setTimeout(() => {
+    window.setTimeout(() => {
       setIsVerifying(false);
       onLoginSuccess();
     }, 900);
@@ -60,8 +61,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+  const handleKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && !otp[index] && index > 0) {
       const prevInput = document.getElementById(`otp-${index - 1}`);
       prevInput?.focus();
     }
@@ -221,11 +222,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </div>
       </div>
 
-      {/* Футер-бейдж соответствия 152-ФЗ */}
-      <footer className="w-full max-w-md pt-4 pb-2 border-t border-slate-800 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-950/60 border border-blue-500/20 text-slate-300 text-[11px]">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Защищено по стандарту 152-ФЗ • Шифрование TLS 1.3</span>
+      <footer className="w-full max-w-md border-t border-slate-800 pb-2 pt-4 text-center">
+        <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-indigo-950/60 px-3 py-1.5 text-[11px] text-slate-300">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+          <span>Защищено по стандарту 152-ФЗ · Шифрование TLS 1.3</span>
         </div>
       </footer>
     </div>

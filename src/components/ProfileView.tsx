@@ -59,209 +59,188 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onRese
   };
 
   return (
-    <div className="w-full max-w-md mx-auto min-h-screen bg-slate-900 text-slate-100 p-4 pb-24 space-y-5 selection:bg-blue-600">
-      
-      {/* Верхняя панель и переключатель Privacy Mode */}
-      <div className="flex items-center justify-between bg-slate-800/80 border border-slate-700/60 p-3 rounded-2xl">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-medium text-slate-300">Скрыть персональные данные</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setPrivacyMode(!privacyMode)}
-          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
-            privacyMode
-              ? 'bg-blue-600/20 text-blue-400 border-blue-500/40'
-              : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-          }`}
-        >
-          {privacyMode ? (
-            <>
-              <EyeOff className="w-3.5 h-3.5" />
-              <span>Скрыто</span>
-            </>
-          ) : (
-            <>
-              <Eye className="w-3.5 h-3.5" />
-              <span>Показано</span>
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Интерактивная карточка: Цифровой студенческий билет и кампусный пропуск */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 border border-blue-500/40 p-5 shadow-2xl">
-        <div className="absolute top-0 right-0 w-36 h-36 bg-blue-600/10 rounded-full blur-2xl pointer-events-none" />
-
-        {/* Шапка билета */}
-        <div className="flex items-start justify-between border-b border-slate-700/60 pb-3 mb-4">
-          <div>
-            <div className="flex items-center gap-1.5 text-amber-500 text-[10px] font-bold uppercase tracking-wider">
-              <GraduationCap className="w-4 h-4" />
-              <span>МГИМО МИД России</span>
-            </div>
-            <h2 className="text-sm font-bold text-white mt-0.5">
-              Цифровой студенческий билет и пропуск
-            </h2>
-          </div>
-          <span className="text-[10px] bg-blue-900/60 text-blue-300 font-mono px-2 py-0.5 rounded border border-blue-500/30">
-            {user.studentId}
-          </span>
-        </div>
-
-        {/* Персональная информация */}
-        <div className="flex gap-4 items-center mb-5">
-          <img
-            src={user.avatarUrl}
-            alt={user.name}
-            className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-500/60 shadow-md shrink-0"
-          />
-          <div className="min-w-0">
-            <h3 className="font-bold text-base text-white truncate">{user.name}</h3>
-            <p className="text-xs text-slate-300 truncate">{user.faculty}</p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
-              <span>{user.course} курс</span>
-              <span>•</span>
-              <span className="font-mono">Группа {user.group}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Динамический QR-код турникета с таймером обновления */}
-        <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center">
-          <div className="relative p-2.5 bg-white rounded-xl shadow-inner mb-2">
-            <QrCode className="w-28 h-28 text-slate-950" />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="bg-blue-600 text-[9px] font-bold text-white px-1.5 py-0.5 rounded shadow">
-                МГИМО
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-            <Clock className="w-3.5 h-3.5 text-amber-500" />
-            <span>Обновление QR через {qrCounter} сек</span>
-          </div>
-          <span className="text-[10px] text-slate-500 mt-0.5">
-            Токен: {qrToken} • Защита от передачи скриншота
-          </span>
-        </div>
-
-        {/* Метрики успеваемости студента */}
-        <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-center">
-          <div className="bg-slate-800/40 rounded-xl p-2 border border-slate-700/30">
-            <span className="text-[10px] text-slate-400 block">БРС Средний</span>
-            <span className="text-sm font-bold text-emerald-400">{user.brsAverage}%</span>
-          </div>
-          <div className="bg-slate-800/40 rounded-xl p-2 border border-slate-700/30">
-            <span className="text-[10px] text-slate-400 block">GPA</span>
-            <span className="text-sm font-bold text-blue-400">{user.gpa.toFixed(2)}</span>
-          </div>
-          <div className="bg-slate-800/40 rounded-xl p-2 border border-slate-700/30">
-            <span className="text-[10px] text-slate-400 block">Рейтинг</span>
-            <span className="text-sm font-bold text-amber-500">#{user.ratingPlace}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Персональные данные (с кнопкой глаза для быстрого переключения) */}
-      <div className="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-4 space-y-3">
+    <div className="pb-24">
+      <header className="bg-slate-900 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-b-3xl px-4 pb-5 pt-6 shadow-md">
         <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-blue-400" />
-            Персональные данные (152-ФЗ)
-          </h4>
+          <div>
+            <h1 className="font-semibold tracking-tight text-xl">Профиль студента</h1>
+            <p className="mt-1 text-xs text-slate-300">
+              {user.course} курс · {user.group}
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => setPrivacyMode(!privacyMode)}
-            className="text-slate-400 hover:text-white transition-colors"
-            title="Показать или скрыть данные"
+            aria-label={privacyMode ? 'Показать персональные данные' : 'Скрыть персональные данные'}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+              privacyMode
+                ? 'border-blue-500/40 bg-blue-600/20 text-blue-400'
+                : 'border-amber-500/40 bg-amber-500/20 text-amber-400'
+            }`}
           >
-            {privacyMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            {privacyMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            <span>{privacyMode ? 'Скрыто' : 'Показано'}</span>
           </button>
         </div>
+      </header>
 
-        <div className="space-y-2 text-xs">
-          <div className="flex justify-between py-1.5 border-b border-slate-700/40">
-            <span className="text-slate-400">Паспорт РФ</span>
-            <span className="font-mono text-slate-200">{maskPassport(user.passport)}</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-slate-700/40">
-            <span className="text-slate-400">СНИЛС</span>
-            <span className="font-mono text-slate-200">{maskSnils(user.snils)}</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-slate-700/40">
-            <span className="text-slate-400">Телефон</span>
-            <span className="font-mono text-slate-200">{maskPhone(user.phone)}</span>
-          </div>
-          <div className="flex justify-between py-1.5">
-            <span className="text-slate-400">Корпоративная почта</span>
-            <span className="font-mono text-slate-200">{user.email}</span>
-          </div>
-        </div>
-      </div>
+      <div className="space-y-4 px-4 py-4">
 
-      {/* Блок «Безопасность и согласие на обработку ПДн» */}
-      <div className="bg-indigo-950/40 border border-indigo-900/60 rounded-2xl p-4 space-y-3">
-        <h4 className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-2">
-          <Bot className="w-4 h-4 text-amber-500" />
-          Безопасность и согласие на обработку ПДн
-        </h4>
+        <section className="relative overflow-hidden rounded-2xl border border-blue-500/40 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 p-5 shadow-md">
+          <div className="pointer-events-none absolute right-0 top-0 h-36 w-36 rounded-full bg-blue-600/10 blur-2xl" />
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-start gap-3">
-          <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0 mt-0.5">
-            <ShieldCheck className="w-4 h-4" />
-          </div>
-          <div className="text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-200">PII Masking Gateway</span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono">
-                ACTIVE
-              </span>
+          <div className="mb-4 flex items-start justify-between border-b border-slate-700/60 pb-3">
+            <div>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
+                <GraduationCap className="h-4 w-4" />
+                <span>МГИМО МИД России</span>
+              </div>
+              <h2 className="mt-0.5 text-sm font-bold text-white">Цифровой студенческий билет</h2>
             </div>
-            <p className="text-slate-400 mt-1 leading-relaxed">
-              Обезличивание включено: при обращении к ИИ-ассистенту деканата ФИО, паспорт и СНИЛС заменяются на токены внутри контура МГИМО (152-ФЗ).
-            </p>
+            <span className="rounded border border-blue-500/30 bg-blue-900/60 px-2 py-0.5 font-mono text-[10px] text-blue-300">
+              {user.studentId}
+            </span>
           </div>
-        </div>
 
-        {/* Список активных сессий */}
-        <div className="space-y-2 pt-1">
-          <span className="text-[11px] text-slate-400 uppercase font-semibold">Активные сессии</span>
-          <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-            <div className="flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-blue-400" />
-              <div>
-                <p className="text-slate-200 font-medium">iPhone 15 Pro • Мобильный PWA</p>
-                <p className="text-[10px] text-slate-500">Москва, пр-т Вернадского, 76 • Онлайн</p>
+          <div className="mb-5 flex items-center gap-4">
+            <img
+              src={user.avatarUrl}
+              alt={user.name}
+              className="h-16 w-16 shrink-0 rounded-2xl border-2 border-amber-500/60 object-cover shadow-md"
+            />
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-bold text-white">{user.name}</h3>
+              <p className="truncate text-xs text-slate-300">{user.faculty}</p>
+              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                <span>{user.course} курс</span>
+                <span>•</span>
+                <span className="font-mono">Группа {user.group}</span>
               </div>
             </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
           </div>
+
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+            <div className="relative mb-2 rounded-xl bg-white p-2.5 shadow-inner">
+              <QrCode className="h-28 w-28 text-slate-950" aria-hidden="true" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
+                  МГИМО
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
+              <Clock className="h-3.5 w-3.5 text-amber-500" />
+              <span>Обновление через {qrCounter} сек</span>
+            </div>
+            <span className="mt-0.5 text-[10px] text-slate-500">
+              Токен: {qrToken} · Защита от передачи скриншота
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-800/80 pt-3 text-center">
+            <div className="rounded-xl border border-slate-700/30 bg-slate-800/40 p-2">
+              <span className="block text-[10px] text-slate-400">БРС Средний</span>
+              <span className="text-sm font-bold text-emerald-400">{user.brsAverage}</span>
+            </div>
+            <div className="rounded-xl border border-slate-700/30 bg-slate-800/40 p-2">
+              <span className="block text-[10px] text-slate-400">GPA</span>
+              <span className="text-sm font-bold text-blue-400">{user.gpa.toFixed(2)}</span>
+            </div>
+            <div className="rounded-xl border border-slate-700/30 bg-slate-800/40 p-2">
+              <span className="block text-[10px] text-slate-400">Рейтинг</span>
+              <span className="text-sm font-bold text-amber-500">#{user.ratingPlace}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-2xl border border-slate-700/60 bg-slate-800/70 p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
+              <Lock className="h-3.5 w-3.5 text-blue-400" />
+              Персональные данные (152-ФЗ)
+            </h3>
+          </div>
+
+          <dl className="space-y-2 text-xs">
+            <div className="flex justify-between border-b border-slate-700/40 py-1.5">
+              <dt className="text-slate-400">Паспорт РФ</dt>
+              <dd className="font-mono text-slate-200">{maskPassport(user.passport)}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-700/40 py-1.5">
+              <dt className="text-slate-400">СНИЛС</dt>
+              <dd className="font-mono text-slate-200">{maskSnils(user.snils)}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-700/40 py-1.5">
+              <dt className="text-slate-400">Телефон</dt>
+              <dd className="font-mono text-slate-200">{maskPhone(user.phone)}</dd>
+            </div>
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-400">Корпоративная почта</dt>
+              <dd className="font-mono text-slate-200">{user.email}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="space-y-3 rounded-2xl border border-indigo-900/60 bg-indigo-950/40 p-4">
+          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white">
+            <Bot className="h-4 w-4 text-amber-500" />
+            Безопасность и согласие на обработку ПДн
+          </h3>
+
+          <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <div className="mt-0.5 shrink-0 rounded-lg bg-emerald-500/10 p-1.5 text-emerald-400">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div className="text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-200">PII Masking Gateway</span>
+                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
+                  ACTIVE
+                </span>
+              </div>
+              <p className="mt-1 leading-relaxed text-slate-400">
+                Обезличивание включено: при обращении к ИИ-ассистенту деканата ФИО, паспорт и СНИЛС заменяются на токены
+                внутри контура МГИМО (152-ФЗ).
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-semibold uppercase text-slate-400">Активные сессии</span>
+            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-xs">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-blue-400" />
+                <div>
+                  <p className="font-medium text-slate-200">iPhone 15 Pro · Мобильный PWA</p>
+                  <p className="text-[10px] text-slate-500">Москва, пр-т Вернадского, 76 · Онлайн</p>
+                </div>
+              </div>
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            </div>
+          </div>
+        </section>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={onResetDemoData}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-900/30 bg-slate-800/80 px-4 py-3 text-xs font-medium text-amber-400 transition-all hover:border-amber-700/50 hover:bg-amber-950/40"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Сбросить демо-данные
+          </button>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-900/30 bg-slate-800/80 px-4 py-3 text-xs font-medium text-rose-400 transition-all hover:border-rose-700/50 hover:bg-rose-950/40"
+          >
+            <LogOut className="h-4 w-4" />
+            Выйти из аккаунта
+          </button>
         </div>
       </div>
-
-      <div className="space-y-2">
-        <button
-          type="button"
-          onClick={onResetDemoData}
-          className="w-full bg-slate-800/80 hover:bg-amber-950/40 text-amber-400 border border-amber-900/30 hover:border-amber-700/50 font-medium text-xs py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
-        >
-          <RotateCcw className="w-4 h-4" />
-          Сбросить демо-данные
-        </button>
-
-        <button
-          type="button"
-          onClick={onLogout}
-          className="w-full bg-slate-800/80 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-700/50 font-medium text-xs py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
-        >
-          <LogOut className="w-4 h-4" />
-          Выйти из аккаунта
-        </button>
-      </div>
-
     </div>
   );
 };
