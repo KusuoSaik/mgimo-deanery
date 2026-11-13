@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { GradeItem, UserProfile } from '../types';
 import { InteractiveGradeCard } from './InteractiveGradeCard';
+import { AIGradePrediction } from './AIGradePrediction';
 
 type GradesViewProps = {
   user: UserProfile;
@@ -79,6 +80,9 @@ export default function GradesView({ user, grades }: GradesViewProps) {
       </header>
 
       <div className="space-y-4 px-4 py-4">
+        {/* AI Prediction */}
+        <AIGradePrediction user={user} grades={grades} />
+
         {/* Фильтры */}
         <motion.div layout className="flex gap-2">
           {FILTERS.map((item) => {

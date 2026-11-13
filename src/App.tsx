@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CalendarDays, ChartColumn, ClipboardList, House, Sparkles, UserRound } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import AiAssistantView from './components/AiAssistantView';
 import DashboardView from './components/DashboardView';
 import GradesView from './components/GradesView';
@@ -7,6 +8,8 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { ProfileView } from './components/ProfileView';
 import RequestsView from './components/RequestsView';
 import ScheduleView from './components/ScheduleView';
+import { AdminModeToggle } from './components/AdminModeToggle';
+import { AdminDashboard } from './components/AdminDashboard';
 import type { NotificationItem, RequestItem, TabType, UserProfile, ScheduleItem, GradeItem, ChatMessage } from './types';
 import { getCurrentUser, isAuthenticated, logout } from './auth/authService';
 import type { StoredAccount } from './auth/types';
@@ -64,6 +67,7 @@ function accountToUserProfile(account: StoredAccount): UserProfile {
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => isAuthenticated());
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [isAdminMode, setIsAdminMode] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<StoredAccount | null>(() => getCurrentUser());
   const [requests, setRequests] = useState<RequestItem[]>(() => {
     const account = getCurrentUser();
@@ -227,6 +231,36 @@ export default function App() {
     setChatHistory(loadStored(`mgimo_chat_${newAccount.id}`, newAccount.chatHistoryData));
   }
 
+  function handleApproveRequest(id: string) {
+    setRequests((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, stage: 4, status: 'Подписано' as const } : item,
+      ),
+    );
+  }
+
+  function handleRejectRequest(id: string, comment: string) {
+    setRequests((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, stage: 2, status: 'На проверке' as const, comment } : item,
+      ),
+    );
+  }
+
+  function handleSendNotification(_studentId: string, message: string) {
+    setNotifications((current) => [
+      {
+        id: `nt-${crypto.randomUUID()}`,
+        title: '📬 Сообщение от деканата',
+        message,
+        date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date()),
+        type: 'warning',
+        isRead: false,
+      },
+      ...current,
+    ]);
+  }
+
   const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
 
   return (
@@ -234,42 +268,80 @@ export default function App() {
       <div className="max-w-md mx-auto min-h-screen bg-slate-50 shadow-2xl relative">
         {isLoggedIn && currentAccount && userProfile ? (
           <>
-            {activeTab === 'dashboard' && (
-              <DashboardView
-                user={userProfile}
-                schedule={schedule}
-                notifications={notifications}
-                requests={requests}
-                onNavigate={setActiveTab}
-                onMarkNotificationRead={handleMarkNotificationRead}
-                onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
-                onDemoCompleteRequest={handleDemoCompleteRequest}
-              />
-            )}
-            {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
-            {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
-            {activeTab === 'requests' && (
-              <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />
-            )}
-            {activeTab === 'ai' && (
-              <AiAssistantView
-                user={userProfile}
-                grades={grades}
-                schedule={schedule}
-                requests={requests}
-                onAddRequest={handleAddRequest}
-              />
-            )}
-            {activeTab === 'profile' && (
-              <ProfileView
-                user={userProfile}
-                account={currentAccount}
-                onLogout={handleLogout}
-                onSwitchAccount={handleSwitchAccount}
-                onResetDemoData={handleResetDemoData}
-              />
-            )}
-            <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+            {/* Admin Mode Toggle */}
+            <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-500">{userProfile.name}</p>
+                <p className="text-[10px] text-slate-400">{isAdminMode ? '🏛️ Режим администратора' : '👨‍🎓 Режим студента'}</p>
+              </div>
+              <AdminModeToggle isAdminMode={isAdminMode} onToggle={setIsAdminMode} />
+            </div>
+
+            {/* Content */}
+            <AnimatePresence mode="wait">
+              {isAdminMode ? (
+                <motion.div
+                  key="admin"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-4 pt-4"
+                >
+                  <AdminDashboard
+                    requests={requests}
+                    students={[userProfile]}
+                    onApproveRequest={handleApproveRequest}
+                    onRejectRequest={handleRejectRequest}
+                    onSendNotification={handleSendNotification}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="student"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  {activeTab === 'dashboard' && (
+                    <DashboardView
+                      user={userProfile}
+                      schedule={schedule}
+                      notifications={notifications}
+                      requests={requests}
+                      onNavigate={setActiveTab}
+                      onMarkNotificationRead={handleMarkNotificationRead}
+                      onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+                      onDemoCompleteRequest={handleDemoCompleteRequest}
+                    />
+                  )}
+                  {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
+                  {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
+                  {activeTab === 'requests' && (
+                    <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />
+                  )}
+                  {activeTab === 'ai' && (
+                    <AiAssistantView
+                      user={userProfile}
+                      grades={grades}
+                      schedule={schedule}
+                      requests={requests}
+                      onAddRequest={handleAddRequest}
+                    />
+                  )}
+                  {activeTab === 'profile' && (
+                    <ProfileView
+                      user={userProfile}
+                      account={currentAccount}
+                      onLogout={handleLogout}
+                      onSwitchAccount={handleSwitchAccount}
+                      onResetDemoData={handleResetDemoData}
+                    />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {!isAdminMode && <BottomNav activeTab={activeTab} onChange={setActiveTab} />}
           </>
         ) : (
           <LoginScreen
