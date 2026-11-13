@@ -5,11 +5,7 @@ import { BottomSheet } from './BottomSheet';
 import type { AIProvider, AIConfig } from '../services/aiService';
 import { loadAIConfig, saveAIConfig, hasAPIKey } from '../services/aiService';
 
-interface AISettingsProps {
-  onClose?: () => void;
-}
-
-export const AISettingsModal = ({ onClose: _onClose }: AISettingsProps = {}) => {
+export const AISettingsModal = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<AIConfig>(loadAIConfig());
   const [testResult, setTestResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null);
@@ -74,7 +70,7 @@ export const AISettingsModal = ({ onClose: _onClose }: AISettingsProps = {}) => 
           message: `❌ Ошибка API (${response.status}). Проверьте ключ и провайдера`,
         });
       }
-    } catch (error) {
+    } catch {
       setTestResult({ status: 'error', message: '❌ Ошибка соединения. Проверьте интернет' });
     } finally {
       setIsTesting(false);

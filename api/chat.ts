@@ -41,26 +41,10 @@ function detectApiProvider(apiKey: string): 'gemini' | 'openai-compatible' {
   return apiKey.startsWith('AIza') ? 'gemini' : 'openai-compatible';
 }
 
-function generateFallbackResponse(messages: ChatMessage[], studentData: StudentData): string {
-  const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || '';
-
-  if (/иди|нахуй|пош[её]л|отстань|заткнись|бесит|достал|хуй|еб|бляд|сука/.test(lastMessage)) {
-    return 'Понял. Не буду навязывать помощь. Если позже понадобится информация по учебе или заявкам, напишите.';
-  }
-
-  const fallbacks: Record<string, string> = {
-    справка: 'Могу помочь оформить справку об обучении. Уточните, пожалуйста, нужен электронный PDF с ЭЦП или бумажный оригинал.',
-    консультация: `По вашим показателям (БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}) могу помочь найти консультацию преподавателя или деканата.`,
-    расписание: 'Ваше расписание доступно в разделе «Расписание».',
-    оценки: `Текущий БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}.`,
-    default: `Добрый день, ${studentData.name}! Я помогу с расписанием, оценками и заявками. Что нужно узнать?`,
-  };
-
-  for (const [keyword, response] of Object.entries(fallbacks)) {
-    if (lastMessage.includes(keyword)) return response;
-  }
-  return fallbacks.default;
-}
+type ProviderResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  choices?: Array<{ message?: { content?: string } }>;
+};
 
 async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string): Promise<string> {
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
@@ -77,7 +61,7 @@ async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt:
   });
 
   if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
-  const data = (await response.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  const data = (await response.json()) as ProviderResponse;
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 

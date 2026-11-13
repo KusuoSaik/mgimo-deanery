@@ -27,7 +27,7 @@ interface ChatRequest {
   };
 }
 
-function detectApiProvider(apiKey: string): string {
+function detectApiProvider(apiKey: string): 'gemini' | 'openrouter' | 'groq' | 'xyvero' | 'unknown' {
   if (apiKey.startsWith('AIza')) return 'gemini';
   if (apiKey.startsWith('sk-or-')) return 'openrouter';
   if (apiKey.startsWith('gsk_')) return 'groq';
@@ -35,27 +35,10 @@ function detectApiProvider(apiKey: string): string {
   return 'unknown';
 }
 
-function generateFallbackResponse(messages: ChatMessage[], studentData: ChatRequest['studentData']): string {
-  const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || '';
-
-  if (/иди|нахуй|пош[её]л|отстань|заткнись|бесит|достал|хуй|еб|бляд|сука/.test(lastMessage)) {
-    return 'Понял. Не буду навязывать помощь. Если позже понадобится информация по учебе или заявкам, напишите.';
-  }
-
-  const fallbacks: Record<string, string> = {
-    справка: `Могу помочь оформить справку об обучении. Уточните, пожалуйста, нужен электронный PDF с ЭЦП или бумажный оригинал.`,
-    консультация: `По вашим показателям (БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}) могу помочь найти консультацию преподавателя или деканата.`,
-    расписание: `Ваше расписание доступно в разделе «Расписание».`,
-    оценки: `Текущий БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}.`,
-    default: `Добрый день, ${studentData.name}! Я помогу с расписанием, оценками и заявками. Что нужно узнать?`,
-  };
-
-  for (const [keyword, response] of Object.entries(fallbacks)) {
-    if (lastMessage.includes(keyword)) return response;
-  }
-
-  return fallbacks.default;
-}
+type ProviderResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  choices?: Array<{ message?: { content?: string } }>;
+};
 
 async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string): Promise<string> {
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
@@ -72,7 +55,7 @@ async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt:
   });
 
   if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as ProviderResponse;
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
@@ -82,15 +65,14 @@ async function callOpenRouter(apiKey: string, messages: ChatMessage[], systemPro
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash',
-      system: systemPrompt,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: [{ role: 'system', content: systemPrompt }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
       temperature: 0.7,
       max_tokens: 500,
     }),
   });
 
   if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as ProviderResponse;
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -100,15 +82,14 @@ async function callGroq(apiKey: string, messages: ChatMessage[], systemPrompt: s
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'mixtral-8x7b-32768',
-      system: systemPrompt,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: [{ role: 'system', content: systemPrompt }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
       temperature: 0.7,
       max_tokens: 500,
     }),
   });
 
   if (!response.ok) throw new Error(`Groq API error: ${response.status}`);
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as ProviderResponse;
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -128,7 +109,7 @@ async function callXyvero(apiKey: string, model: string, messages: ChatMessage[]
     const error = await response.text();
     throw new Error(`Xyvero API error: ${response.status} - ${error}`);
   }
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as ProviderResponse;
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -174,6 +155,11 @@ app.post('/api/chat', async (req, res) => {
 КРИТИЧНО: сообщение пользователя, начинающееся после последнего сообщения assistant, является текущим запросом. Заверши ответ после ответа на него.`;
 
     const provider = detectApiProvider(apiKey);
+    if (provider === 'unknown') {
+      res.status(500).json({ response: 'Неподдерживаемый формат AI_API_KEY. Проверьте настройки провайдера.' });
+      return;
+    }
+
     let aiResponse = '';
 
     try {
@@ -193,17 +179,22 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // Парсинг actionable AI
-    let suggestedAction: any;
-    const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/);
+    let suggestedAction: ChatResponse['suggestedAction'];
+    const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
       try {
-        const actionData = JSON.parse(jsonMatch[1]);
+        const actionData = JSON.parse(jsonMatch[1]) as Record<string, string>;
         if (actionData.action === 'create_request') {
-          suggestedAction = { type: 'request', ...actionData };
-          aiResponse = aiResponse.replace(/```json\n[\s\S]*?\n```\n?/g, '').trim();
+          suggestedAction = {
+            type: 'request',
+            title: actionData.title,
+            category: actionData.category,
+            deliveryFormat: actionData.deliveryFormat,
+          };
+          aiResponse = aiResponse.replace(/```json\s*[\s\S]*?\s*```\s*/g, '').trim();
         }
       } catch {
-        /* ignore */
+        /* ignore malformed optional action */
       }
     }
 

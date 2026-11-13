@@ -162,23 +162,6 @@ export default function App() {
     return [];
   });
 
-  // Синхронизация данных при смене аккаунта
-  useEffect(() => {
-    const account = getCurrentUser();
-    if (account) {
-      setCurrentAccount(account);
-      setIsLoggedIn(true);
-      setRequests(loadStored(`mgimo_requests_${account.id}`, account.requestsData));
-      setNotifications(loadStored(`mgimo_notifications_${account.id}`, account.notificationsData));
-      setSchedule(loadStored(`mgimo_schedule_${account.id}`, account.scheduleData));
-      setGrades(loadStored(`mgimo_grades_${account.id}`, account.gradesData));
-      setChatHistory(loadStored(`mgimo_chat_${account.id}`, account.chatHistoryData));
-    } else {
-      setCurrentAccount(null);
-      setIsLoggedIn(false);
-    }
-  }, [isLoggedIn]);
-
   // Сохранение данных в localStorage
   useEffect(() => {
     if (currentAccount) {
@@ -434,6 +417,11 @@ export default function App() {
                     const user = getCurrentUser();
                     if (user) {
                       setCurrentAccount(user);
+                      setRequests(loadStored(`mgimo_requests_${user.id}`, user.requestsData));
+                      setNotifications(loadStored(`mgimo_notifications_${user.id}`, user.notificationsData));
+                      setSchedule(loadStored(`mgimo_schedule_${user.id}`, user.scheduleData));
+                      setGrades(loadStored(`mgimo_grades_${user.id}`, user.gradesData));
+                      setChatHistory(loadStored(`mgimo_chat_${user.id}`, user.chatHistoryData));
                       setIsLoggedIn(true);
                       setActiveTab('dashboard');
                     }

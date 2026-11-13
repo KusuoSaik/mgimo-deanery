@@ -1,3 +1,5 @@
+import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types';
+
 export type UserRole = 'Студент' | 'Староста' | 'Иностранный студент';
 export type Faculty = 'МО' | 'МП' | 'МЭО' | 'МИЭП' | 'ИМТУР' | 'ФУП';
 
@@ -35,12 +37,11 @@ export interface StoredAccount {
     passport: string;
     snils: string;
   };
-  // Персональные данные для каждого аккаунта
-  scheduleData: any[];
-  gradesData: any[];
-  requestsData: any[];
-  notificationsData: any[];
-  chatHistoryData: any[];
+  scheduleData: ScheduleItem[];
+  gradesData: GradeItem[];
+  requestsData: RequestItem[];
+  notificationsData: NotificationItem[];
+  chatHistoryData: ChatMessage[];
 }
 
 export interface AuthState {
