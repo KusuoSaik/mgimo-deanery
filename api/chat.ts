@@ -43,12 +43,17 @@ function detectApiProvider(apiKey: string): 'gemini' | 'openai-compatible' {
 
 function generateFallbackResponse(messages: ChatMessage[], studentData: StudentData): string {
   const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || '';
+
+  if (/иди|нахуй|пош[её]л|отстань|заткнись|бесит|достал|хуй|еб|бляд|сука/.test(lastMessage)) {
+    return 'Понял. Не буду навязывать помощь. Если позже понадобится информация по учебе или заявкам, напишите.';
+  }
+
   const fallbacks: Record<string, string> = {
-    справка: `Здравствуйте, ${studentData.name}! Я помогу вам оформить справку. Какой тип справки вам нужен? Я предложу наиболее подходящий вариант из очереди документов для вашего ${studentData.course}-го курса факультета ${studentData.faculty}.`,
-    консультация: `По вашим показателям (БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}) я рекомендую встречу с деканом. Вы на ${studentData.ratingPlace}-м месте на курсе — отличный результат!`,
-    расписание: 'Ваше расписание загружено в систему. Можете посмотреть его в разделе «Расписание» приложения.',
-    оценки: `Текущий БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}. ${studentData.brsAverage >= 70 ? 'Отличный результат!' : 'Рекомендую записаться на консультацию.'}`,
-    default: `Добрый день, ${studentData.name}! Я — ИИ-ассистент цифрового деканата МГИМО. Как я могу вам помочь?`,
+    справка: 'Могу помочь оформить справку об обучении. Уточните, пожалуйста, нужен электронный PDF с ЭЦП или бумажный оригинал.',
+    консультация: `По вашим показателям (БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}) могу помочь найти консультацию преподавателя или деканата.`,
+    расписание: 'Ваше расписание доступно в разделе «Расписание».',
+    оценки: `Текущий БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}.`,
+    default: `Добрый день, ${studentData.name}! Я помогу с расписанием, оценками и заявками. Что нужно узнать?`,
   };
 
   for (const [keyword, response] of Object.entries(fallbacks)) {
@@ -157,11 +162,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const apiKey = process.env.AI_API_KEY;
     if (!apiKey) {
-      res.status(200).json({ response: generateFallbackResponse(messages, studentData) });
+      res.status(503).json({ response: 'ИИ-сервис временно недоступен: на сервере не настроен AI_API_KEY.' });
       return;
     }
 
     const systemPrompt = `Ты — официальный ИИ-ассистент Цифрового деканата МГИМО (Москва, МИД России).
+
+Твоя задача — вести естественный многоходовый диалог со студентом, а не выдавать шаблонные ответы. Всегда отвечай именно на ПОСЛЕДНЕЕ сообщение пользователя с учетом всей истории диалога. Не повторяй предыдущий ответ и не возвращайся к старой теме, если студент ее не продолжает.
 
 ## КОНТЕКСТ СТУДЕНТА (обезличено по 152-ФЗ)
 **Роль:** ${studentData.role}
@@ -171,11 +178,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 **Рейтинг:** место ${studentData.ratingPlace} на курсе
 **Академические показатели:** БРС ${studentData.brsAverage}/100, GPA ${studentData.gpa.toFixed(2)}
 
-## ПРАВИЛА ОТВЕТОВ
-1. Вежливый, профессиональный тон на русском языке.
-2. Используй данные студента из контекста.
-3. Никогда не запрашивай пароли, реквизиты карт или другие чувствительные данные.
-4. Если студент просит справку, заявку или направление, предложи JSON-блок:
+## ПРАВИЛА ДИАЛОГА
+1. Отвечай на русском языке, спокойно, кратко и по делу.
+2. Если студент выражает раздражение или просит прекратить диалог, признай это и не навязывай помощь.
+3. Не повторяй приветствие и академические показатели в каждом сообщении.
+4. Не утверждай, что заявка создана или отправлена: у тебя нет права создавать заявки напрямую.
+5. Если студент только спрашивает о справке, объясни варианты и задай уточняющий вопрос.
+6. Добавляй JSON-блок только если студент явно просит оформить документ или создать заявку.
+7. Если студент не просит документ, никогда не добавляй JSON-блок.
+8. Не запрашивай пароли, данные карт, паспорт или СНИЛС.
+
+Если студент явно просит оформить справку, добавь в конце строго такой блок:
 \`\`\`json
 {"action":"create_request","title":"Справка об обучении","category":"Справки","deliveryFormat":"Электронная с ЭЦП (PDF)"}
 \`\`\``;
@@ -194,8 +207,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         );
       }
     } catch (error) {
-      console.error('API call failed, using fallback:', error);
-      aiResponse = generateFallbackResponse(messages, studentData);
+      console.error('API call failed:', error);
+      res.status(502).json({ response: 'ИИ-сервис не ответил. Проверьте AI_API_KEY, AI_MODEL и настройки API-провайдера.' });
+      return;
     }
 
     let suggestedAction: ChatResponse['suggestedAction'] | undefined;

@@ -38,12 +38,16 @@ function detectApiProvider(apiKey: string): string {
 function generateFallbackResponse(messages: ChatMessage[], studentData: ChatRequest['studentData']): string {
   const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || '';
 
+  if (/иди|нахуй|пош[её]л|отстань|заткнись|бесит|достал|хуй|еб|бляд|сука/.test(lastMessage)) {
+    return 'Понял. Не буду навязывать помощь. Если позже понадобится информация по учебе или заявкам, напишите.';
+  }
+
   const fallbacks: Record<string, string> = {
-    справка: `Здравствуйте, ${studentData.name}! Я помогу вам оформить справку. Какой тип справки вам нужен?`,
-    консультация: `По вашим показателям (БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}) я рекомендую встречу с деканом.`,
-    расписание: `Ваше расписание загружено в систему.`,
+    справка: `Могу помочь оформить справку об обучении. Уточните, пожалуйста, нужен электронный PDF с ЭЦП или бумажный оригинал.`,
+    консультация: `По вашим показателям (БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}) могу помочь найти консультацию преподавателя или деканата.`,
+    расписание: `Ваше расписание доступно в разделе «Расписание».`,
     оценки: `Текущий БРС: ${studentData.brsAverage}/100, GPA: ${studentData.gpa.toFixed(2)}.`,
-    default: `Добрый день, ${studentData.name}! Я — ИИ-ассистент цифрового деканата МГИМО. Чем я вам могу помочь?`,
+    default: `Добрый день, ${studentData.name}! Я помогу с расписанием, оценками и заявками. Что нужно узнать?`,
   };
 
   for (const [keyword, response] of Object.entries(fallbacks)) {
@@ -141,26 +145,32 @@ app.post('/api/chat', async (req, res) => {
     const apiKey = process.env.AI_API_KEY;
 
     if (!apiKey) {
-      console.warn('⚠️ AI_API_KEY not configured, using fallback');
-      const fallbackResponse = generateFallbackResponse(messages, studentData);
-      res.json({ response: fallbackResponse });
+      console.error('AI_API_KEY is not configured');
+      res.status(503).json({ response: 'ИИ-сервис временно недоступен: на сервере не настроен AI_API_KEY.' });
       return;
     }
 
     const systemPrompt = `Ты — официальный ИИ-ассистент Цифрового деканата МГИМО.
 
+Твоя задача — вести естественный многоходовый диалог со студентом, а не выдавать шаблонные ответы. Всегда отвечай именно на ПОСЛЕДНЕЕ сообщение пользователя с учетом всей истории диалога. Не повторяй предыдущий ответ и не возвращайся к старой теме, если студент ее не продолжает.
+
 ## КОНТЕКСТ СТУДЕНТА (обезличено по 152-ФЗ)
 **Роль:** ${studentData.role}
 **Курс:** ${studentData.course}
 **Факультет:** ${studentData.faculty}
+**Группа:** ${studentData.group}
 **Рейтинг:** место ${studentData.ratingPlace}
 **БРС:** ${studentData.brsAverage}/100, GPA ${studentData.gpa.toFixed(2)}
 
-## ПРАВИЛА
-1. Вежливый, профессиональный тон
-2. Используй реальные данные студента
-3. Если просит справку — предложи интерактивную карточку
-4. Никогда не запрашивай чувствительные данные`;
+## ПРАВИЛА ДИАЛОГА
+1. Отвечай на русском языке, спокойно, кратко и по делу.
+2. Если студент выражает раздражение или просит прекратить диалог, признай это и не навязывай помощь.
+3. Не повторяй приветствие и академические показатели в каждом сообщении.
+4. Не утверждай, что заявка создана или отправлена: у тебя нет права создавать заявки напрямую.
+5. Если студент только спрашивает о справке, объясни варианты и задай уточняющий вопрос.
+6. Добавляй ACTION только если студент явно просит оформить документ или создать заявку. Формат: <ACTION>{"action":"create_request","title":"Справка об обучении","category":"Справки","deliveryFormat":"Электронная с ЭЦП (PDF)"}</ACTION>
+7. Если студент не просит документ, никогда не добавляй ACTION.
+8. Не запрашивай пароли, данные карт, паспорт или СНИЛС.`;
 
     const provider = detectApiProvider(apiKey);
     let aiResponse = '';
@@ -177,7 +187,8 @@ app.post('/api/chat', async (req, res) => {
       }
     } catch (apiError) {
       console.error('❌ API call failed:', apiError);
-      aiResponse = generateFallbackResponse(messages, studentData);
+      res.status(502).json({ response: 'ИИ-сервис не ответил. Проверьте AI_API_KEY, AI_MODEL и настройки API-провайдера.' });
+      return;
     }
 
     // Парсинг actionable AI
