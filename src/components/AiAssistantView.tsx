@@ -74,19 +74,19 @@ export default function AiAssistantView({
       timestamp: nowTime(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const conversationMessages = [...messages, userMessage];
+    setMessages(conversationMessages);
     setInputValue('');
     setIsLoading(true);
 
     try {
       const apiUrl = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || 'http://localhost:3001') : '';
-      const conversationMessages = [...messages, userMessage];
       const response = await fetch(`${apiUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: conversationMessages
-            .filter((m) => !m.suggestedAction)
+            .filter((m) => m.id !== 'msg-welcome' && !m.suggestedAction)
             .map((m) => ({
               role: m.sender === 'user' ? 'user' : 'assistant',
               content: m.text,

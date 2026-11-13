@@ -112,16 +112,15 @@ async function callGroq(apiKey: string, messages: ChatMessage[], systemPrompt: s
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function callXyvero(apiKey: string, messages: ChatMessage[], systemPrompt: string): Promise<string> {
+async function callXyvero(apiKey: string, model: string, messages: ChatMessage[], systemPrompt: string): Promise<string> {
   const response = await fetch('https://api.xyvero.space/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'gemini-3.8-flash',
-      system: systemPrompt,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      temperature: 0.7,
-      max_tokens: 500,
+      model,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      temperature: 0.2,
+      max_tokens: 700,
     }),
   });
 
@@ -152,7 +151,7 @@ app.post('/api/chat', async (req, res) => {
 
     const systemPrompt = `Ты — официальный ИИ-ассистент Цифрового деканата МГИМО.
 
-Твоя задача — вести естественный многоходовый диалог со студентом, а не выдавать шаблонные ответы. Всегда отвечай именно на ПОСЛЕДНЕЕ сообщение пользователя с учетом всей истории диалога. Не повторяй предыдущий ответ и не возвращайся к старой теме, если студент ее не продолжает.
+Твоя задача — вести естественный многоходовый диалог со студентом. Отвечай только на ПОСЛЕДНЕЕ сообщение пользователя. Предыдущие сообщения используй только для понимания контекста и местоимений. Никогда не объединяй несколько запросов в один ответ и не отвечай на будущие вопросы, которых еще не было.
 
 ## КОНТЕКСТ СТУДЕНТА (обезличено по 152-ФЗ)
 **Роль:** ${studentData.role}
@@ -164,13 +163,15 @@ app.post('/api/chat', async (req, res) => {
 
 ## ПРАВИЛА ДИАЛОГА
 1. Отвечай на русском языке, спокойно, кратко и по делу.
-2. Если студент выражает раздражение или просит прекратить диалог, признай это и не навязывай помощь.
-3. Не повторяй приветствие и академические показатели в каждом сообщении.
-4. Не утверждай, что заявка создана или отправлена: у тебя нет права создавать заявки напрямую.
-5. Если студент только спрашивает о справке, объясни варианты и задай уточняющий вопрос.
-6. Добавляй ACTION только если студент явно просит оформить документ или создать заявку. Формат: <ACTION>{"action":"create_request","title":"Справка об обучении","category":"Справки","deliveryFormat":"Электронная с ЭЦП (PDF)"}</ACTION>
-7. Если студент не просит документ, никогда не добавляй ACTION.
-8. Не запрашивай пароли, данные карт, паспорт или СНИЛС.`;
+2. Не повторяй приветствие и академические показатели без необходимости.
+3. Если вопрос не относится к деканату, всё равно ответь на него напрямую, если это обычный безопасный вопрос. Например, на просьбу о бинарном поиске дай рабочий пример на C++ и краткое объяснение.
+4. Если студент выражает раздражение или просит прекратить диалог, признай это и не навязывай помощь.
+5. Не утверждай, что заявка создана или отправлена: у тебя нет права создавать заявки напрямую.
+6. Добавляй JSON-блок действия только если студент явно просит оформить документ или создать заявку.
+7. Если студент не просит документ, никогда не добавляй JSON-блок.
+8. Не запрашивай пароли, данные карт, паспорт или СНИЛС.
+
+КРИТИЧНО: сообщение пользователя, начинающееся после последнего сообщения assistant, является текущим запросом. Заверши ответ после ответа на него.`;
 
     const provider = detectApiProvider(apiKey);
     let aiResponse = '';
@@ -183,7 +184,7 @@ app.post('/api/chat', async (req, res) => {
       } else if (provider === 'groq') {
         aiResponse = await callGroq(apiKey, messages, systemPrompt);
       } else if (provider === 'xyvero') {
-        aiResponse = await callXyvero(apiKey, messages, systemPrompt);
+        aiResponse = await callXyvero(apiKey, process.env.AI_MODEL || 'gemini-3.8-flash', messages, systemPrompt);
       }
     } catch (apiError) {
       console.error('❌ API call failed:', apiError);
