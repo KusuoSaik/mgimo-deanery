@@ -65,6 +65,7 @@ export default function AiAssistantView({
   const [isLoading, setIsLoading] = useState(false);
   const [showPdnInfo, setShowPdnInfo] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pendingRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const hasUserMessages = messages.some((m) => m.sender === 'user');
   const suggestions = ROLE_SUGGESTIONS[user.role ?? 'Студент'] ?? ROLE_SUGGESTIONS['Студент'];
@@ -83,7 +84,8 @@ export default function AiAssistantView({
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || pendingRef.current) return;
+    pendingRef.current = true;
 
     const userMessage: ChatMessage = { id: makeId(), sender: 'user', text: trimmed, timestamp: nowTime() };
     const history = [...messages, userMessage];
@@ -92,8 +94,9 @@ export default function AiAssistantView({
     setIsLoading(true);
 
     try {
-      const apiUrl = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || 'http://localhost:3001') : '';
-      const response = await fetch(`${apiUrl}/api/chat`, {
+      const response = await fetch('/api/chat', {
+        credentials: 'same-origin',
+        signal: AbortSignal.timeout(55000),
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,6 +124,7 @@ export default function AiAssistantView({
         },
       ]);
     } finally {
+      pendingRef.current = false;
       setIsLoading(false);
     }
   }
@@ -140,7 +144,7 @@ export default function AiAssistantView({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-52px)] flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+    <div className="flex h-[calc(100dvh-52px)] flex-col pb-24">
       <header className="relative shrink-0 overflow-hidden rounded-b-3xl bg-slate-900 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-4 pb-4 pt-3 text-white shadow-md">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/25">

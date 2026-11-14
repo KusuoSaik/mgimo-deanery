@@ -96,7 +96,7 @@ export default function App() {
   function handleDemoCompleteRequest() { applyServerAction('advance_demo_request'); }
   function handleAddRequest(req: Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>) { applyServerAction('create_request', req); }
   function handleUpdateRequest(updatedRequest: RequestItem) {
-    applyServerAction('update_request', { id: updatedRequest.id, patch: { comment: updatedRequest.comment, reason: updatedRequest.reason } });
+    applyServerAction('advance_demo_request', { id: updatedRequest.id });
   }
   function handleLogout() {
     void logout().finally(() => {
@@ -128,9 +128,9 @@ export default function App() {
       {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
       {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
       {activeTab === 'requests' && <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />}
-      {activeTab === 'ai' && <AiAssistantView user={userProfile} messages={chatHistory} onMessagesChange={handleMessagesChange} onAddRequest={handleAddRequest} />}
       {activeTab === 'profile' && <ProfileView user={userProfile} onLogout={handleLogout} onResetDemoData={handleResetDemoData} />}
     </motion.div></AnimatePresence>
+    <div hidden={activeTab !== 'ai'}><AiAssistantView user={userProfile} messages={chatHistory} onMessagesChange={handleMessagesChange} onAddRequest={handleAddRequest} /></div>
     <AnimatePresence><BottomNav key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }} /></AnimatePresence>
   </motion.div> : <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.35 }}><LoginScreen onLoginSuccess={(account) => { applyAccount(account); setIsLoggedIn(true); setActiveTab('dashboard'); }} /></motion.div>}</AnimatePresence></div></div></MotionConfig>;
 }

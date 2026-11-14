@@ -98,9 +98,23 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       const messages = Array.isArray(body.messages) ? body.messages : [];
       state.chatHistory = messages.slice(-40) as typeof state.chatHistory;
     } else if (action === 'advance_demo_request') {
-      const target = state.requests.find((item) => item.stage !== 5);
-      if (target) {
-        state.requests = state.requests.map((item) => item.id === target.id ? { ...item, stage: 5, status: 'Готово к выдаче' } : item);
+      const target = typeof body.id === 'string'
+        ? state.requests.find((item) => item.id === body.id)
+        : state.requests.find((item) => item.stage < 5);
+      if (!target) {
+        res.status(404).json({ error: 'Заявка не найдена.' });
+        return;
+      }
+      if (target.stage < 5) {
+        const stage = (target.stage + 1) as RequestItem['stage'];
+        const statuses: RequestItem['status'][] = ['Зарегистрирована в СЭД', 'На проверке', 'На подписи', 'Подписано', 'Готово к выдаче'];
+        const stampKeys = ['registered', 'inReview', 'inSigning', 'signed', 'ready'];
+        const stamp = new Date().toLocaleString('ru-RU');
+        state.requests = state.requests.map((item) => item.id === target.id ? {
+          ...item, stage, status: statuses[stage - 1], updatedAt: stamp,
+          timestamps: { ...item.timestamps, [stampKeys[stage - 1]]: stamp },
+          ...(stage === 5 ? { verificationQrCode: `DEMO-${crypto.randomUUID()}` } : {}),
+        } : item);
       }
     } else {
       res.status(400).json({ error: 'Неизвестное действие.' });
