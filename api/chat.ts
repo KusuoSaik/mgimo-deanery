@@ -32,7 +32,7 @@ type ProviderResponse = {
 };
 
 async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string, signal: AbortSignal): Promise<string> {
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.AI_MODEL || 'gemini-2.5-flash')}:generateContent`, {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -46,7 +46,7 @@ async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt:
     }),
   });
 
-  if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+  if (!response.ok) throw new AiLimitError('Gemini временно недоступен (' + response.status + '). Попробуйте позже.', response.status);
   const data = (await response.json()) as ProviderResponse;
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
@@ -71,7 +71,7 @@ async function callOpenAICompatible(
     }),
   });
 
-  if (!response.ok) throw new Error(`AI API error: ${response.status}`);
+  if (!response.ok) throw new AiLimitError('AI API: ' + response.status, response.status);
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
   return data.choices?.[0]?.message?.content || '';
 }
@@ -127,7 +127,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       .filter((message): message is ChatMessage => Boolean(message) && typeof message === 'object' && (message as ChatMessage).role !== undefined && typeof (message as ChatMessage).content === 'string')
       .slice(-20)
       .map((message): ChatMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content.slice(0, 4000) }));
-    const state = getState(req, account);
+    const state = await getState(req, account);
     const studentData = {
       course: account.profile.course,
       faculty: account.profile.faculty,
@@ -141,6 +141,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       requests: state.requests,
     };
 
+    const lastQuestion = messages.at(-1)?.content.toLowerCase() || '';
+    if (/^(мои оценки|какие у меня оценки|my grades)[?!. ]*$/.test(lastQuestion)) {
+      res.status(200).json({ response: 'Учебные данные / Academic records:\n' + account.gradesData.map(g => `${g.subject}: ${g.brsPoints}/${g.maxPoints}`).join('\n') });
+      return;
+    }
     const apiKey = env.AI_API_KEY;
     if (!apiKey) {
       res.status(503).json({ response: 'ИИ-сервис временно недоступен: на сервере не настроен AI_API_KEY.' });

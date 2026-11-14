@@ -1,3 +1,4 @@
+import { StateConflict, StateStoreUnavailable } from '../server/stateStore.js';
 import type { ApiRequest, ApiResponse } from './_server.js';
 import { getAuthenticatedAccount, getState, publicAccount, readBody, responseHelpers, saveState } from './_server.js';
 import type { NotificationItem, RequestItem } from '../src/types.js';
@@ -13,11 +14,6 @@ function isDeliveryFormat(value: unknown): value is RequestItem['deliveryFormat'
   return typeof value === 'string' && deliveryFormats.includes(value as RequestItem['deliveryFormat']);
 }
 
-function snapshot(account: ReturnType<typeof getAuthenticatedAccount>, request: ApiRequest) {
-  if (!account) return null;
-  return publicAccount(account, getState(request, account));
-}
-
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   responseHelpers(res);
   res.setHeader('Cache-Control', 'no-store');
@@ -28,9 +24,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
-  const state = getState(req, account);
+  const state = await getState(req, account);
   if (req.method === 'GET') {
-    res.status(200).json({ account: snapshot(account, req) });
+    res.status(200).json({ account: publicAccount(account, state) });
     return;
   }
 
@@ -121,9 +117,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       return;
     }
 
-    saveState(req, res, state);
+    await saveState(req, res, state);
     res.status(200).json({ account: publicAccount(account, state) });
-  } catch {
+  } catch (error) {
+    if (error instanceof StateConflict) { res.status(409).json({ error: 'Данные изменились. Повторите действие.' }); return; }
+    if (error instanceof StateStoreUnavailable) { res.status(503).json({ error: error.message }); return; }
     res.status(400).json({ error: 'Некорректный запрос.' });
   }
 }

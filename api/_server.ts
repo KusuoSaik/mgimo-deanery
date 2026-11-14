@@ -1,6 +1,6 @@
+import { loadState, persistState, StateConflict } from '../server/stateStore.js';
 import { env } from 'node:process';
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ACCOUNTS_DATABASE } from '../src/auth/accountsDatabase.js';
 import type { ChatMessage, NotificationItem, RequestItem } from '../src/types.js';
@@ -19,7 +19,6 @@ if (env.VERCEL && !env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET must be configured in the deployment environment');
 }
 const SECRET = env.SESSION_SECRET || 'local-development-only-change-this-secret';
-const KEY = createHash('sha256').update(SECRET).digest();
 
 const PASSWORD_HASHES: Record<string, string> = {
   'a.volkov@my.mgimo.ru': '9b074d04acd3dbee379be3247115d302ae00ebfca888d6eab3e94422be4b3b3c2d6406206a25cc159c52e9302c4d7c024a890d12008d184569364a2ea542316e',
@@ -47,29 +46,6 @@ export function readCookies(request: ApiRequest): Record<string, string> {
     if (key) result[key] = decodeURIComponent(value);
   }
   return result;
-}
-
-function seal(payload: unknown): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', KEY, iv);
-  const compressed = deflateRawSync(Buffer.from(JSON.stringify(payload), 'utf8'));
-  const encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return [iv, tag, encrypted].map((part) => part.toString('base64url')).join('.');
-}
-
-function unseal<T>(token: string | undefined): T | null {
-  if (!token) return null;
-  try {
-    const [ivText, tagText, encryptedText] = token.split('.');
-    if (!ivText || !tagText || !encryptedText) return null;
-    const decipher = createDecipheriv('aes-256-gcm', KEY, Buffer.from(ivText, 'base64url'));
-    decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
-    const compressed = Buffer.concat([decipher.update(Buffer.from(encryptedText, 'base64url')), decipher.final()]);
-    return JSON.parse(inflateRawSync(compressed).toString('utf8')) as T;
-  } catch {
-    return null;
-  }
 }
 
 function signSession(userId: string, expiresAt: number): string {
@@ -158,17 +134,39 @@ export function defaultState(account: StoredAccount): StoredDemoState {
   };
 }
 
-export function getState(request: ApiRequest, account: StoredAccount): StoredDemoState {
-  return unseal<StoredDemoState>(readCookies(request)[STATE_COOKIE]) || defaultState(account);
+const versions = new WeakMap<ApiRequest, number>();
+export async function getState(request: ApiRequest, account: StoredAccount): Promise<StoredDemoState> {
+  const loaded = await loadState(account.id, defaultState(account));
+  versions.set(request, loaded.version);
+  return loaded.data;
 }
+export async function saveState(request: ApiRequest, _response: ApiResponse, state: StoredDemoState): Promise<void> {
+  const account = getAuthenticatedAccount(request);
+  if (!account) throw new Error('Unauthorized');
+  let version = versions.get(request);
+  if (version === undefined) throw new Error('Load state before updating');
 
-export function saveState(request: ApiRequest, response: ApiResponse, state: StoredDemoState): void {
-  const safeState: StoredDemoState = {
-    requests: state.requests.slice(0, 12),
-    notifications: state.notifications.slice(0, 20),
-    chatHistory: state.chatHistory.slice(-40),
-  };
-  setCookie(response, STATE_COOKIE, seal(safeState), cookieOptions(request, SESSION_TTL_MS / 1000));
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await persistState(account.id, version, state);
+      return;
+    } catch (error) {
+      if (!(error instanceof StateConflict) || attempt === 2) throw error;
+      const latest = await loadState(account.id, defaultState(account));
+      const requests = new Map(latest.data.requests.map((item) => [item.id, item]));
+      for (const item of state.requests) requests.set(item.id, item);
+      const notifications = new Map(latest.data.notifications.map((item) => [item.id, item]));
+      for (const item of state.notifications) notifications.set(item.id, item);
+      const chat = new Map(latest.data.chatHistory.map((item) => [item.id, item]));
+      for (const item of state.chatHistory) chat.set(item.id, item);
+      state = {
+        requests: [...requests.values()].slice(0, 12),
+        notifications: [...notifications.values()].slice(0, 20),
+        chatHistory: [...chat.values()].slice(-40),
+      };
+      version = latest.version;
+    }
+  }
 }
 
 export function responseHelpers(response: ApiResponse): void {

@@ -12,7 +12,7 @@ type AiAssistantViewProps = {
   user: UserProfile;
   messages: ChatMessage[];
   onMessagesChange: Dispatch<SetStateAction<ChatMessage[]>>;
-  onAddRequest: (request: RequestFormData) => void;
+  onAddRequest: (request: RequestFormData) => Promise<RequestItem>;
 };
 
 const ROLE_SUGGESTIONS: Record<string, string[]> = {
@@ -134,13 +134,17 @@ export default function AiAssistantView({
     void send(inputValue);
   }
 
-  function handleRequestAction(action: SuggestedAction, messageId: string) {
-    onAddRequest({
-      title: action.title,
-      category: action.category,
-      deliveryFormat: action.deliveryFormat,
-    });
-    onMessagesChange((prev) => prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)));
+  async function handleRequestAction(action: SuggestedAction, messageId: string) {
+    try {
+      await onAddRequest({
+        title: action.title,
+        category: action.category,
+        deliveryFormat: action.deliveryFormat,
+      });
+      onMessagesChange((prev) => prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)));
+    } catch {
+      onMessagesChange((prev) => [...prev, { id: makeId(), sender: 'ai', text: 'Не удалось создать заявку. Попробуйте ещё раз.', timestamp: nowTime() }]);
+    }
   }
 
   return (

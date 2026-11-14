@@ -1,5 +1,6 @@
 import type { ApiRequest, ApiResponse } from './_server.js';
-import { clearAuthCookies, defaultState, findAccount, getAuthenticatedAccount, getState, issueSession, publicAccount, readBody, responseHelpers, saveState, verifyPassword } from './_server.js';
+import { clearAuthCookies, findAccount, getAuthenticatedAccount, getState, issueSession, publicAccount, readBody, responseHelpers, verifyPassword } from './_server.js';
+import { StateStoreUnavailable } from '../server/stateStore.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   responseHelpers(res);
@@ -11,7 +12,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       res.status(401).json({ authenticated: false });
       return;
     }
-    const state = getState(req, account);
+    const state = await getState(req, account);
     res.status(200).json({ authenticated: true, account: publicAccount(account, state) });
     return;
   }
@@ -45,9 +46,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     }
 
     issueSession(req, res, account.id);
-    saveState(req, res, defaultState(account));
-    res.status(200).json({ authenticated: true, account: publicAccount(account, defaultState(account)) });
-  } catch {
+    const state = await getState(req, account);
+    res.status(200).json({ authenticated: true, account: publicAccount(account, state) });
+  } catch (error) {
+    if (error instanceof StateStoreUnavailable) {
+      res.status(503).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: 'Некорректный запрос' });
   }
 }

@@ -1,3 +1,4 @@
+import StudentHub from './components/StudentHub';
 import { useEffect, useRef, useState, type SetStateAction } from 'react';
 import { CalendarDays, ChartColumn, ClipboardList, House, Sparkles, UserRound } from 'lucide-react';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
@@ -23,7 +24,7 @@ const TABS: { id: TabType; label: string; icon: typeof House }[] = [
   { id: 'profile', label: 'Профиль', icon: UserRound },
 ];
 
-function BottomNav({ activeTab, onChange, badges }: { activeTab: TabType; onChange: (tab: TabType) => void; badges: Partial<Record<TabType, number>> }) {
+function BottomNav({ activeTab, onChange, badges, english }: { english: boolean; activeTab: TabType; onChange: (tab: TabType) => void; badges: Partial<Record<TabType, number>> }) {
   return (
     <motion.nav aria-label="Разделы" initial={{ y: 90 }} animate={{ y: 0 }} exit={{ y: 90 }} transition={{ type: 'spring', stiffness: 400, damping: 36 }} className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200/70 bg-white/85 backdrop-blur-xl backdrop-saturate-150">
       <div className="grid grid-cols-6 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5">
@@ -31,7 +32,8 @@ function BottomNav({ activeTab, onChange, badges }: { activeTab: TabType; onChan
           const Icon = tab.icon;
           const active = tab.id === activeTab;
           const badge = badges[tab.id] ?? 0;
-          return <button key={tab.id} type="button" onClick={() => onChange(tab.id)} aria-current={active ? 'page' : undefined} className={`group relative flex flex-col items-center gap-1 rounded-xl px-0.5 py-1 text-[10.5px] font-medium leading-tight transition-colors duration-200 ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><span className="relative flex h-8 w-12 items-center justify-center">{active && <motion.span layoutId="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} className="absolute inset-0 rounded-full bg-blue-600/10" />}<motion.span animate={{ y: active ? -1 : 0, scale: active ? 1.06 : 1 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} className="relative"><Icon className="h-[21px] w-[21px]" strokeWidth={active ? 2.3 : 1.9} aria-hidden="true" /></motion.span>{badge > 0 && <motion.span key="badge" initial={{ scale: 0 }} animate={{ scale: 1 }} className="tabular absolute right-1.5 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white ring-2 ring-white">{badge}</motion.span>}</span>{tab.label}</button>;
+          const labels: Record<TabType, string> = {dashboard:'Home',schedule:'Schedule',grades:'Grades',requests:'Requests',ai:'Assistant',profile:'Profile'};
+          return <button key={tab.id} type="button" onClick={() => onChange(tab.id)} aria-current={active ? 'page' : undefined} className={`group relative flex flex-col items-center gap-1 rounded-xl px-0.5 py-1 text-[10.5px] font-medium leading-tight transition-colors duration-200 ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><span className="relative flex h-8 w-12 items-center justify-center">{active && <motion.span layoutId="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} className="absolute inset-0 rounded-full bg-blue-600/10" />}<motion.span animate={{ y: active ? -1 : 0, scale: active ? 1.06 : 1 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} className="relative"><Icon className="h-[21px] w-[21px]" strokeWidth={active ? 2.3 : 1.9} aria-hidden="true" /></motion.span>{badge > 0 && <motion.span key="badge" initial={{ scale: 0 }} animate={{ scale: 1 }} className="tabular absolute right-1.5 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white ring-2 ring-white">{badge}</motion.span>}</span>{english ? labels[tab.id] : tab.label}</button>;
         })}
       </div>
     </motion.nav>
@@ -43,6 +45,8 @@ const pageVariants = { enter: (direction: number) => ({ opacity: 0, x: direction
 function accountToUserProfile(account: StoredAccount): UserProfile { return account.profile; }
 
 export default function App() {
+  const [english, setEnglish] = useState(() => localStorage.getItem('dean-en') === 'true');
+  const [actionError, setActionError] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [activeTab, setActiveTabState] = useState<TabType>('dashboard');
@@ -83,20 +87,29 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }
 
-  function applyServerAction(action: string, payload: Record<string, unknown> = {}) {
-    void performStudentAction(action, payload).then(applyAccount).catch((error: unknown) => console.error('Student API error:', error));
+  async function applyServerAction(action: string, payload: Record<string, unknown> = {}): Promise<StoredAccount> {
+    try {
+      const account = await performStudentAction(action, payload);
+      applyAccount(account);
+      return account;
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Не удалось сохранить / Could not save');
+      throw error;
+    }
   }
 
-  function handleMarkAllNotificationsRead() { applyServerAction('mark_all_notifications_read'); }
-  function handleMarkNotificationRead(id: string) { applyServerAction('mark_notification_read', { id }); }
+  function handleMarkAllNotificationsRead() { void applyServerAction('mark_all_notifications_read'); }
+  function handleMarkNotificationRead(id: string) { void applyServerAction('mark_notification_read', { id }); }
   function handleResetDemoData() {
     if (!window.confirm('Сбросить все данные к исходным для текущего аккаунта?')) return;
-    applyServerAction('reset_demo');
+    void applyServerAction('reset_demo');
   }
-  function handleDemoCompleteRequest() { applyServerAction('advance_demo_request'); }
-  function handleAddRequest(req: Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>) { applyServerAction('create_request', req); }
+  function handleDemoCompleteRequest() { void applyServerAction('advance_demo_request'); }
+  function handleAddRequest(req: Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>): Promise<RequestItem> {
+    return applyServerAction('create_request', req).then((account) => account.requestsData.find((item) => item.title === req.title) ?? account.requestsData[0]);
+  }
   function handleUpdateRequest(updatedRequest: RequestItem) {
-    applyServerAction('advance_demo_request', { id: updatedRequest.id });
+    void applyServerAction('advance_demo_request', { id: updatedRequest.id });
   }
   function handleLogout() {
     void logout().finally(() => {
@@ -106,12 +119,16 @@ export default function App() {
       setActiveTab('dashboard');
     });
   }
+  const chatRef = useRef<ChatMessage[]>([]);
+  useEffect(() => { chatRef.current = chatHistory; }, [chatHistory]);
+  const chatWrites = useRef(Promise.resolve());
   function handleMessagesChange(next: SetStateAction<ChatMessage[]>) {
-    setChatHistory((current) => {
-      const updated = typeof next === 'function' ? next(current) : next;
-      void performStudentAction('update_chat', { messages: updated }).catch((error: unknown) => console.error('Chat persistence error:', error));
-      return updated;
-    });
+    const updated = typeof next === 'function' ? next(chatRef.current) : next;
+    chatRef.current = updated;
+    setChatHistory(updated);
+    chatWrites.current = chatWrites.current.then(async () => {
+      await performStudentAction('update_chat', { messages: updated });
+    }).catch((error: unknown) => setActionError(error instanceof Error ? error.message : 'Could not save chat'));
   }
 
   const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
@@ -123,14 +140,16 @@ export default function App() {
 
   return <MotionConfig reducedMotion="user"><div className="min-h-dvh bg-slate-200"><div className="relative mx-auto min-h-dvh max-w-md bg-slate-50 shadow-2xl shadow-slate-900/20"><AnimatePresence mode="wait" initial={false}>{isLoggedIn && currentAccount && userProfile ? <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }}>
     <div className="sticky top-0 z-30 flex items-center gap-3 bg-slate-900 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] text-white"><button type="button" onClick={() => setActiveTab('profile')} className="flex min-w-0 items-center gap-2.5 rounded-xl text-left"><Avatar src={userProfile.avatarUrl} name={userProfile.name} size={32} className="rounded-[10px]" /><span className="min-w-0"><span className="block truncate text-[13px] font-medium leading-tight">{firstName(userProfile.name)}</span><span className="block truncate text-[11px] leading-tight text-slate-400">Группа {userProfile.group} • Защищённый демо-кабинет</span></span></button></div>
+    {actionError && <p role="alert" className="bg-rose-50 p-4 text-rose-800">{actionError}<button onClick={() => setActionError('')} className="ml-3 underline">OK</button></p>}
+    {(activeTab === 'dashboard') && <StudentHub user={userProfile} grades={grades} schedule={schedule} requests={requests} onNavigate={setActiveTab} onRequest={handleAddRequest} english={english} setEnglish={setEnglish} />}
     <AnimatePresence mode="wait" initial={false} custom={direction}><motion.div key={activeTab} custom={direction} variants={pageVariants} initial="enter" animate="center" exit="exit" transition={{ x: { type: 'spring', stiffness: 420, damping: 40 }, opacity: { duration: 0.18 } }}>
-      {activeTab === 'dashboard' && <DashboardView user={userProfile} schedule={schedule} notifications={notifications} requests={requests} onNavigate={setActiveTab} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onDemoCompleteRequest={handleDemoCompleteRequest} />}
+      {activeTab === 'dashboard' && !english && <DashboardView user={userProfile} schedule={schedule} notifications={notifications} requests={requests} onNavigate={setActiveTab} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onDemoCompleteRequest={handleDemoCompleteRequest} />}
       {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
       {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
       {activeTab === 'requests' && <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />}
       {activeTab === 'profile' && <ProfileView user={userProfile} onLogout={handleLogout} onResetDemoData={handleResetDemoData} />}
     </motion.div></AnimatePresence>
     <div hidden={activeTab !== 'ai'}><AiAssistantView user={userProfile} messages={chatHistory} onMessagesChange={handleMessagesChange} onAddRequest={handleAddRequest} /></div>
-    <AnimatePresence><BottomNav key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }} /></AnimatePresence>
+    <AnimatePresence><BottomNav english={english} key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }} /></AnimatePresence>
   </motion.div> : <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.35 }}><LoginScreen onLoginSuccess={(account) => { applyAccount(account); setIsLoggedIn(true); setActiveTab('dashboard'); }} /></motion.div>}</AnimatePresence></div></div></MotionConfig>;
 }

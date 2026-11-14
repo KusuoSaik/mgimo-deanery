@@ -14,7 +14,7 @@ type RequestFormData = Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'
 type RequestsViewProps = {
   user: UserProfile;
   requests: RequestItem[];
-  onAddRequest: (request: RequestFormData) => void;
+  onAddRequest: (request: RequestFormData) => Promise<RequestItem>;
   onUpdateRequest?: (request: RequestItem) => void;
 };
 
@@ -58,7 +58,7 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [certificateRequest, setCertificateRequest] = useState<RequestItem | null>(null);
-  const [justAdded, setJustAdded] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedRequest = requests.find((item) => item.id === selectedId) ?? null;
 
@@ -82,19 +82,25 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
     }))
     .filter((option) => option.value === 'all' || option.count > 0 || option.value === selectedFilter);
 
-  function submitRequest(event: FormEvent<HTMLFormElement>) {
+  async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
-    onAddRequest({ title: trimmedTitle, category, deliveryFormat });
-    setTitle('');
-    setCategory('Справки');
-    setDeliveryFormat('Электронная с ЭЦП (PDF)');
-    setSelectedFilter('all');
-    setSearchQuery('');
-    setIsFormOpen(false);
-    setJustAdded(true);
-    window.setTimeout(() => setJustAdded(false), 1600);
+    setIsSubmitting(true);
+    try {
+      const created = await onAddRequest({ title: trimmedTitle, category, deliveryFormat });
+      setTitle('');
+      setCategory('Справки');
+      setDeliveryFormat('Электронная с ЭЦП (PDF)');
+      setSelectedFilter('all');
+      setSearchQuery('');
+      setSelectedId(created.id);
+      setDetailOpen(true);
+      setIsFormOpen(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -153,10 +159,10 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
 
         <motion.ul layout className="space-y-2.5 pt-1">
           <AnimatePresence initial={false} mode="popLayout">
-            {filteredRequests.map((req, index) => {
+            {filteredRequests.map((req) => {
               const meta = CATEGORY_META[req.category];
               const Icon = meta.icon;
-              const highlight = justAdded && index === 0;
+              const highlight = false;
               return (
                 <motion.li
                   key={req.id}
@@ -291,12 +297,12 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
             />
           </div>
 
-          <button
+      <button
             type="submit"
-            disabled={!title.trim()}
+            disabled={!title.trim() || isSubmitting}
             className="pressable w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400"
           >
-            Отправить в деканат
+            {isSubmitting ? 'Отправляем…' : 'Отправить в деканат'}
           </button>
           <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
             <ShieldCheck className="h-3.5 w-3.5" />

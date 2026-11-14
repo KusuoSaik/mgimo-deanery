@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
@@ -16,19 +16,32 @@ interface BottomSheetProps {
 export const BottomSheet = ({ isOpen, onClose, title, subtitle, tone = 'light', children }: BottomSheetProps) => {
   const controls = useDragControls();
   const titleId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
   const dark = tone === 'dark';
 
   useEffect(() => {
     if (!isOpen) return;
+    const dialog = dialogRef.current;
+    const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () => dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [];
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') { onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const items = [...focusable()];
+      if (!items.length) { event.preventDefault(); dialog?.focus(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => (focusable()[0] ?? dialog)?.focus());
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener('keydown', onKey);
+      previousActive?.focus();
     };
   }, [isOpen, onClose]);
 
@@ -48,6 +61,8 @@ export const BottomSheet = ({ isOpen, onClose, title, subtitle, tone = 'light', 
           />
 
           <motion.section
+            ref={dialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}

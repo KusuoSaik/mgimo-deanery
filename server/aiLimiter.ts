@@ -98,7 +98,8 @@ export async function runLimitedAi<T>(key: string, task: (signal: AbortSignal) =
   consumeRateLimit(key);
   const release = await acquireSlot();
   const maxAttempts = positiveInteger('AI_MAX_ATTEMPTS', 3);
-  const timeoutMs = positiveInteger('AI_REQUEST_TIMEOUT_MS', 25_000);
+  const timeoutMs = Math.min(25000, positiveInteger('AI_REQUEST_TIMEOUT_MS', 25_000));
+  const deadline = Date.now() + 40000;
 
   try {
     let lastError: unknown;
@@ -107,7 +108,7 @@ export async function runLimitedAi<T>(key: string, task: (signal: AbortSignal) =
         return await withTimeout(task, timeoutMs);
       } catch (error) {
         lastError = error;
-        if (attempt === maxAttempts) throw error;
+        if (attempt === maxAttempts || (error instanceof AiLimitError && ![429,500,502,503,504].includes(error.statusCode)) || Date.now() + timeoutMs + 1500 > deadline) throw error;
         await new Promise((resolve) => setTimeout(resolve, Math.min(250 * 2 ** (attempt - 1), 1500)));
       }
     }
