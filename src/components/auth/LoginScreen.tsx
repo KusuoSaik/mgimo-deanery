@@ -28,9 +28,9 @@ type Screen = 'credentials' | '2fa' | 'register';
 type AuthMethod = 'mgimo' | 'esia';
 
 const DEMO_ACCOUNTS = [
-  { name: 'Алексей Волков', hint: 'Староста, отличник', initials: 'АВ', tone: 'bg-blue-900 text-amber-300', email: 'a.volkov@my.mgimo.ru', password: 'mgimo2026' },
-  { name: 'Дмитрий Соколов', hint: 'Есть долги по БРС', initials: 'ДС', tone: 'bg-amber-900/70 text-amber-200', email: 'd.sokolov@my.mgimo.ru', password: 'debt1234' },
-  { name: 'София Чен', hint: 'Иностранная студентка', initials: 'СЧ', tone: 'bg-emerald-900/70 text-emerald-200', email: 's.chen@my.mgimo.ru', password: 'china2025' },
+  { name: 'Алексей Волков', hint: 'Староста, отличник', initials: 'АВ', tone: 'bg-blue-900 text-amber-300', email: 'a.volkov@my.mgimo.ru', snils: '158-472-836 21', password: 'mgimo2026' },
+  { name: 'Дмитрий Соколов', hint: 'Есть долги по БРС', initials: 'ДС', tone: 'bg-amber-900/70 text-amber-200', email: 'd.sokolov@my.mgimo.ru', snils: '172-583-947 45', password: 'debt1234' },
+  { name: 'София Чен', hint: 'Иностранная студентка', initials: 'СЧ', tone: 'bg-emerald-900/70 text-emerald-200', email: 's.chen@my.mgimo.ru', snils: '+7 (999) 782-34-91', password: 'china2025' },
 ];
 
 const FACULTIES: Faculty[] = ['МО', 'МП', 'МЭО', 'МИЭП', 'ИМТУР', 'ФУП'];
@@ -232,11 +232,10 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
     setRegError('');
   };
 
-  const handleDemoLogin = (email: string, password: string) => {
-    setLoginEmail(email);
+  const handleDemoLogin = (email: string, snilsOrPhone: string, password: string) => {
+    setLoginEmail(authMethod === 'esia' ? snilsOrPhone : email);
     setLoginPassword(password);
     setLoginError('');
-    setAuthMethod('mgimo');
   };
 
   const panel = {
@@ -302,7 +301,10 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
             <Landmark className="h-8 w-8" strokeWidth={1.8} />
           </motion.div>
           <h1 className="text-[28px] font-semibold leading-tight tracking-tight">Цифровой деканат</h1>
-          <p className="mt-1 text-sm text-slate-400">МГИМО МИД России</p>
+          <p className="mt-1 text-sm text-slate-300">Концепт личного кабинета студента МГИМО</p>
+          <p className="mt-1.5 inline-block rounded-full bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-300 ring-1 ring-inset ring-amber-400/20">
+            Конкурсный прототип • Не является официальным сервисом вуза
+          </p>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}>
@@ -615,12 +617,12 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
               <p className="mb-2 px-1 text-xs text-slate-500">Демо-аккаунты: нажмите, чтобы подставить данные</p>
               <div className="overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.08]">
                 {DEMO_ACCOUNTS.map((demo, index) => {
-                  const active = loginEmail === demo.email;
+                  const active = loginEmail === demo.email || loginEmail === demo.snils;
                   return (
                     <button
                       key={demo.email}
                       type="button"
-                      onClick={() => handleDemoLogin(demo.email, demo.password)}
+                      onClick={() => handleDemoLogin(demo.email, demo.snils, demo.password)}
                       className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] ${index > 0 ? 'border-t border-white/[0.06]' : ''}`}
                     >
                       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold ${demo.tone}`}>{demo.initials}</span>
@@ -644,9 +646,12 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
         </AnimatePresence>
       </div>
 
-      <footer className="relative mx-auto flex w-full max-w-sm items-center justify-center gap-2 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-xs text-slate-500">
-        <ShieldCheck className="h-4 w-4 text-emerald-500/80" />
-        Данные защищены по 152-ФЗ, соединение TLS 1.3
+      <footer className="relative mx-auto flex w-full max-w-sm flex-col items-center justify-center gap-1 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center text-xs text-slate-500">
+        <span className="flex items-center gap-1.5">
+          <ShieldCheck className="h-4 w-4 text-emerald-500/80" />
+          Вымышленные демо-данные • Защита по 152-ФЗ (TLS 1.3)
+        </span>
+        <span className="text-[11px] text-slate-600">Концепт для конкурса «Цифровой деканат будущего»</span>
       </footer>
     </div>
   );

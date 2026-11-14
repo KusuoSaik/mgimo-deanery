@@ -82,6 +82,11 @@ export const InteractiveScheduleCard = ({ item, index, isToday = false }: Intera
                   сейчас
                 </span>
               )}
+              {item.changeNote && (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                  {item.changeNote}
+                </span>
+              )}
             </div>
             <h3 className="mt-0.5 text-[15px] font-semibold leading-snug tracking-tight text-slate-900">{item.subject}</h3>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
@@ -101,6 +106,11 @@ export const InteractiveScheduleCard = ({ item, index, isToday = false }: Intera
 
       <BottomSheet isOpen={isOpen} onClose={() => setIsOpen(false)} title={item.subject} subtitle={<Badge className={tone.badge}>{item.type}</Badge>}>
         <div className="space-y-5">
+          {item.changeNote && (
+            <div className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+              Изменение в расписании: {item.changeNote}
+            </div>
+          )}
           <dl className="divide-y divide-slate-100 rounded-2xl bg-slate-50 ring-1 ring-inset ring-slate-100">
             {[
               { icon: Clock, label: 'Время', value: `${item.day}, ${item.time}` },

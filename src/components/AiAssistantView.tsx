@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, CircleCheck, KeyRound, ServerCog, ShieldCheck, Sparkles, UserX } from 'lucide-react';
-import type { ChatMessage, GradeItem, RequestItem, UserProfile, ScheduleItem } from '../types';
+import type { ChatMessage, GradeItem, RequestItem, UserProfile, ScheduleItem, SuggestedAction } from '../types';
 import { ActionableAICard } from './ActionableAICard';
 import { BottomSheet } from './BottomSheet';
-import { firstName } from './ui/tokens';
 
 type RequestFormData = Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>;
 
@@ -14,25 +13,15 @@ type AiAssistantViewProps = {
   grades?: GradeItem[];
   schedule?: ScheduleItem[];
   requests?: RequestItem[];
+  messages: ChatMessage[];
+  onMessagesChange: Dispatch<SetStateAction<ChatMessage[]>>;
   onAddRequest: (request: RequestFormData) => void;
 };
 
-type SuggestedAction = {
-  type: 'request';
-  title: string;
-  category: string;
-  deliveryFormat: string;
-};
-
-interface AIMessage extends ChatMessage {
-  suggestedAction?: SuggestedAction;
-  actionSent?: boolean;
-}
-
 const ROLE_SUGGESTIONS: Record<string, string[]> = {
-  Студент: ['Оформи справку об обучении', 'Какие у меня оценки?', 'Когда следующая пара?'],
-  Староста: ['Сделай сводку по БРС группы', 'Запроси справки на всех должников', 'Организуй встречу с деканом'],
-  'Иностранный студент': ['Справка для продления визы', 'Документы для посольства', 'Когда зимние каникулы?'],
+  Студент: ['Какие у меня оценки по БРС?', 'Когда следующая пара?', 'Оформи справку об обучении'],
+  Староста: ['Какие у меня баллы БРС?', 'Когда следующая пара и есть ли переносы?', 'Оформи справку об успеваемости'],
+  'Иностранный студент': ['Оформи справку для продления визы', 'Какие у меня оценки?', 'Когда следующая пара?'],
 };
 
 let messageSeq = 0;
@@ -69,15 +58,15 @@ function AiMark() {
   );
 }
 
-export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewProps) {
-  const [messages, setMessages] = useState<AIMessage[]>([
-    {
-      id: 'msg-welcome',
-      sender: 'ai',
-      text: `Здравствуйте, ${firstName(user.name)}! Я ассистент цифрового деканата. Подскажу по расписанию и оценкам, оформлю справку или заявку. С чего начнём?`,
-      timestamp: nowTime(),
-    },
-  ]);
+export default function AiAssistantView({
+  user,
+  grades = [],
+  schedule = [],
+  requests = [],
+  messages,
+  onMessagesChange,
+  onAddRequest,
+}: AiAssistantViewProps) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPdnInfo, setShowPdnInfo] = useState(false);
@@ -102,9 +91,9 @@ export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewP
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
 
-    const userMessage: AIMessage = { id: makeId(), sender: 'user', text: trimmed, timestamp: nowTime() };
+    const userMessage: ChatMessage = { id: makeId(), sender: 'user', text: trimmed, timestamp: nowTime() };
     const history = [...messages, userMessage];
-    setMessages(history);
+    onMessagesChange(history);
     setInputValue('');
     setIsLoading(true);
 
@@ -115,30 +104,51 @@ export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: history
-            .filter((m) => m.id !== 'msg-welcome' && !m.suggestedAction)
+            .filter((_, idx) => idx > 0 || history[0]?.sender === 'user')
             .map((m) => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
           studentData: {
-            name: user.name,
             course: user.course,
             faculty: user.faculty,
             group: user.group,
-            role: user.role,
+            role: user.role ?? 'Студент',
             gpa: user.gpa,
             brsAverage: user.brsAverage,
             ratingPlace: user.ratingPlace,
+            grades: grades.map((g) => ({
+              subject: g.subject,
+              brsPoints: g.brsPoints,
+              status: g.status,
+              examType: g.examType,
+              professor: g.professor,
+            })),
+            schedule: schedule.map((s) => ({
+              day: s.day,
+              weekType: s.weekType,
+              time: s.time,
+              subject: s.subject,
+              type: s.type,
+              room: s.room,
+              building: s.building,
+              changeNote: s.changeNote,
+            })),
+            requests: requests.map((r) => ({
+              title: r.title,
+              status: r.status,
+              stage: r.stage,
+            })),
           },
         }),
       });
 
       if (!response.ok) throw new Error('API error');
       const data = (await response.json()) as { response: string; suggestedAction?: SuggestedAction };
-      setMessages((prev) => [
+      onMessagesChange((prev) => [
         ...prev,
         { id: makeId(), sender: 'ai', text: data.response, timestamp: nowTime(), suggestedAction: data.suggestedAction },
       ]);
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages((prev) => [
+      onMessagesChange((prev) => [
         ...prev,
         {
           id: makeId(),
@@ -160,10 +170,10 @@ export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewP
   function handleRequestAction(action: SuggestedAction, messageId: string) {
     onAddRequest({
       title: action.title,
-      category: action.category as RequestItem['category'],
-      deliveryFormat: action.deliveryFormat as RequestItem['deliveryFormat'],
+      category: action.category,
+      deliveryFormat: action.deliveryFormat,
     });
-    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)));
+    onMessagesChange((prev) => prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)));
   }
 
   return (
@@ -217,7 +227,10 @@ export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewP
                   <p className={`tabular mt-1 text-right text-[10.5px] ${mine ? 'text-blue-200' : 'text-slate-400'}`}>{msg.timestamp}</p>
 
                   {msg.suggestedAction && !msg.actionSent && (
-                    <ActionableAICard action={msg.suggestedAction} onConfirm={() => handleRequestAction(msg.suggestedAction!, msg.id)} />
+                    <ActionableAICard
+                      action={msg.suggestedAction}
+                      onConfirm={() => handleRequestAction(msg.suggestedAction!, msg.id)}
+                    />
                   )}
                   {msg.actionSent && (
                     <motion.p
@@ -311,12 +324,17 @@ export default function AiAssistantView({ user, onAddRequest }: AiAssistantViewP
         </form>
       </div>
 
-      <BottomSheet isOpen={showPdnInfo} onClose={() => setShowPdnInfo(false)} title="Как защищены ваши данные" subtitle="Ассистент работает по 152-ФЗ">
+      <BottomSheet
+        isOpen={showPdnInfo}
+        onClose={() => setShowPdnInfo(false)}
+        title="Как защищены ваши данные"
+        subtitle="Ассистент работает по 152-ФЗ"
+      >
         <ul className="space-y-4">
           {[
             { icon: KeyRound, title: 'Ключ API хранится на сервере', text: 'В браузере и DevTools его не видно.' },
             { icon: UserX, title: 'ФИО заменяется на роль', text: 'Модель видит только курс, факультет и роль.' },
-            { icon: ShieldCheck, title: 'Паспорт и СНИЛС не уходят в модель', text: 'Они остаются внутри контура МГИМО.' },
+            { icon: ShieldCheck, title: 'Паспорт и СНИЛС не уходят в модель', text: 'Они остаются внутри контура деканата.' },
             { icon: ServerCog, title: 'Запросы идут через прокси деканата', text: 'Сервер добавляет системные инструкции и отправляет обезличенный запрос.' },
           ].map(({ icon: Icon, title, text }, index) => (
             <motion.li

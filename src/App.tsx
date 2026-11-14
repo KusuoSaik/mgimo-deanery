@@ -13,7 +13,7 @@ import ScheduleView from './components/ScheduleView';
 import { AdminModeToggle } from './components/AdminModeToggle';
 import { AdminDashboard } from './components/AdminDashboard';
 import type { NotificationItem, RequestItem, TabType, UserProfile, ScheduleItem, GradeItem, ChatMessage } from './types';
-import { getCurrentUser, getAllAccounts, isAuthenticated, logout } from './auth/authService';
+import { getCurrentUser, getAllAccounts, isAuthenticated, logout, saveAuthState } from './auth/authService';
 import type { StoredAccount } from './auth/types';
 
 const TABS: { id: TabType; label: string; icon: typeof House }[] = [
@@ -25,7 +25,15 @@ const TABS: { id: TabType; label: string; icon: typeof House }[] = [
   { id: 'profile', label: 'Профиль', icon: UserRound },
 ];
 
-function BottomNav({ activeTab, onChange, badges }: { activeTab: TabType; onChange: (tab: TabType) => void; badges: Partial<Record<TabType, number>> }) {
+function BottomNav({
+  activeTab,
+  onChange,
+  badges,
+}: {
+  activeTab: TabType;
+  onChange: (tab: TabType) => void;
+  badges: Partial<Record<TabType, number>>;
+}) {
   return (
     <motion.nav
       aria-label="Разделы"
@@ -104,7 +112,6 @@ function loadStored<T>(key: string, fallback: T): T {
   }
 }
 
-// Конвертер StoredAccount в UserProfile
 function accountToUserProfile(account: StoredAccount): UserProfile {
   return account.profile;
 }
@@ -124,45 +131,30 @@ export default function App() {
     setActiveTabState(tab);
     window.scrollTo({ top: 0 });
   }
+
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<StoredAccount | null>(() => getCurrentUser());
   const [requests, setRequests] = useState<RequestItem[]>(() => {
     const account = getCurrentUser();
-    if (account) {
-      return loadStored(`mgimo_requests_${account.id}`, account.requestsData);
-    }
-    return [];
+    return account ? loadStored(`mgimo_requests_${account.id}`, account.requestsData) : [];
   });
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     const account = getCurrentUser();
-    if (account) {
-      return loadStored(`mgimo_notifications_${account.id}`, account.notificationsData);
-    }
-    return [];
+    return account ? loadStored(`mgimo_notifications_${account.id}`, account.notificationsData) : [];
   });
   const [schedule, setSchedule] = useState<ScheduleItem[]>(() => {
     const account = getCurrentUser();
-    if (account) {
-      return loadStored(`mgimo_schedule_${account.id}`, account.scheduleData);
-    }
-    return [];
+    return account ? loadStored(`mgimo_schedule_${account.id}`, account.scheduleData) : [];
   });
   const [grades, setGrades] = useState<GradeItem[]>(() => {
     const account = getCurrentUser();
-    if (account) {
-      return loadStored(`mgimo_grades_${account.id}`, account.gradesData);
-    }
-    return [];
+    return account ? loadStored(`mgimo_grades_${account.id}`, account.gradesData) : [];
   });
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
     const account = getCurrentUser();
-    if (account) {
-      return loadStored(`mgimo_chat_${account.id}`, account.chatHistoryData);
-    }
-    return [];
+    return account ? loadStored(`mgimo_chat_${account.id}`, account.chatHistoryData) : [];
   });
 
-  // Сохранение данных в localStorage
   useEffect(() => {
     if (currentAccount) {
       localStorage.setItem(`mgimo_requests_${currentAccount.id}`, JSON.stringify(requests));
@@ -212,7 +204,9 @@ export default function App() {
   function handleDemoCompleteRequest() {
     setRequests((current) => {
       const target = current.find((item) => item.stage !== 5);
-      return target ? current.map((item) => item.id === target.id ? { ...item, stage: 5, status: 'Готово к выдаче' } : item) : current;
+      return target
+        ? current.map((item) => (item.id === target.id ? { ...item, stage: 5, status: 'Готово к выдаче' } : item))
+        : current;
     });
   }
 
@@ -226,26 +220,25 @@ export default function App() {
       status: 'Зарегистрирована в СЭД',
     };
     setRequests((current) => [created, ...current]);
-    setNotifications((current) => [{
-      id: `nt-${crypto.randomUUID()}`,
-      title: 'Заявка зарегистрирована в СЭД',
-      message: `Заявка «${created.title}» зарегистрирована в системе электронного документооборота.`,
-      date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(now),
-      type: 'success',
-      isRead: false,
-    }, ...current]);
+    setNotifications((current) => [
+      {
+        id: `nt-${crypto.randomUUID()}`,
+        title: 'Заявка зарегистрирована в СЭД',
+        message: `Заявка «${created.title}» зарегистрирована в системе электронного документооборота.`,
+        date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(now),
+        type: 'success',
+        isRead: false,
+      },
+      ...current,
+    ]);
   }
 
   function handleUpdateRequest(updatedRequest: RequestItem) {
-    setRequests((current) =>
-      current.map((item) => (item.id === updatedRequest.id ? updatedRequest : item)),
-    );
+    setRequests((current) => current.map((item) => (item.id === updatedRequest.id ? updatedRequest : item)));
   }
 
   function handleMarkNotificationRead(id: string) {
-    setNotifications((current) =>
-      current.map((item) => (item.id === id ? { ...item, isRead: true } : item)),
-    );
+    setNotifications((current) => current.map((item) => (item.id === id ? { ...item, isRead: true } : item)));
   }
 
   function handleLogout() {
@@ -256,13 +249,21 @@ export default function App() {
   }
 
   function handleSwitchAccount(newAccount: StoredAccount) {
-    // Сохраняем текущие данные перед переключением
     if (currentAccount) {
       localStorage.setItem(`mgimo_requests_${currentAccount.id}`, JSON.stringify(requests));
       localStorage.setItem(`mgimo_notifications_${currentAccount.id}`, JSON.stringify(notifications));
+      localStorage.setItem(`mgimo_schedule_${currentAccount.id}`, JSON.stringify(schedule));
+      localStorage.setItem(`mgimo_grades_${currentAccount.id}`, JSON.stringify(grades));
+      localStorage.setItem(`mgimo_chat_${currentAccount.id}`, JSON.stringify(chatHistory));
     }
 
-    // Загружаем данные нового аккаунта
+    saveAuthState({
+      isAuthenticated: true,
+      currentUser: newAccount,
+      twoFactorCode: null,
+      twoFactorExpiry: null,
+    });
+
     setCurrentAccount(newAccount);
     setRequests(loadStored(`mgimo_requests_${newAccount.id}`, newAccount.requestsData));
     setNotifications(loadStored(`mgimo_notifications_${newAccount.id}`, newAccount.notificationsData));
@@ -273,17 +274,13 @@ export default function App() {
 
   function handleApproveRequest(id: string) {
     setRequests((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, stage: 4, status: 'Подписано' as const } : item,
-      ),
+      current.map((item) => (item.id === id ? { ...item, stage: 4, status: 'Подписано' as const } : item)),
     );
   }
 
   function handleRejectRequest(id: string, comment: string) {
     setRequests((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, stage: 2, status: 'На проверке' as const, comment } : item,
-      ),
+      current.map((item) => (item.id === id ? { ...item, stage: 2, status: 'На проверке' as const, comment } : item)),
     );
   }
 
@@ -310,7 +307,6 @@ export default function App() {
   }
 
   const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
-
   const unreadCount = notifications.filter((item) => !item.isRead).length;
 
   return (
@@ -319,7 +315,13 @@ export default function App() {
         <div className="relative mx-auto min-h-dvh max-w-md bg-slate-50 shadow-2xl shadow-slate-900/20">
           <AnimatePresence mode="wait" initial={false}>
             {isLoggedIn && currentAccount && userProfile ? (
-              <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }}>
+              <motion.div
+                key="app"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35 }}
+              >
                 <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-slate-900 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] text-white">
                   <button
                     type="button"
@@ -331,9 +333,11 @@ export default function App() {
                   >
                     <Avatar src={userProfile.avatarUrl} name={userProfile.name} size={32} className="rounded-[10px]" />
                     <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-medium leading-tight">{firstName(userProfile.name)}</span>
+                      <span className="block truncate text-[13px] font-medium leading-tight">
+                        {firstName(userProfile.name)}
+                      </span>
                       <span className="block truncate text-[11px] leading-tight text-slate-400">
-                        {isAdminMode ? 'Пульт деканата' : `Группа ${userProfile.group}`}
+                        {isAdminMode ? 'Пульт деканата • Концепт' : `Группа ${userProfile.group} • Концепт`}
                       </span>
                     </span>
                   </button>
@@ -382,7 +386,12 @@ export default function App() {
                       {activeTab === 'schedule' && <ScheduleView schedule={schedule} />}
                       {activeTab === 'grades' && <GradesView user={userProfile} grades={grades} />}
                       {activeTab === 'requests' && (
-                        <RequestsView user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest} />
+                        <RequestsView
+                          user={userProfile}
+                          requests={requests}
+                          onAddRequest={handleAddRequest}
+                          onUpdateRequest={handleUpdateRequest}
+                        />
                       )}
                       {activeTab === 'ai' && (
                         <AiAssistantView
@@ -390,6 +399,8 @@ export default function App() {
                           grades={grades}
                           schedule={schedule}
                           requests={requests}
+                          messages={chatHistory}
+                          onMessagesChange={setChatHistory}
                           onAddRequest={handleAddRequest}
                         />
                       )}
@@ -407,11 +418,19 @@ export default function App() {
                 </AnimatePresence>
 
                 <AnimatePresence>
-                  {!isAdminMode && <BottomNav key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }} />}
+                  {!isAdminMode && (
+                    <BottomNav key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }} />
+                  )}
                 </AnimatePresence>
               </motion.div>
             ) : (
-              <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.35 }}>
+              <motion.div
+                key="login"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.35 }}
+              >
                 <LoginScreen
                   onLoginSuccess={() => {
                     const user = getCurrentUser();

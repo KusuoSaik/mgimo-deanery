@@ -6,7 +6,7 @@ interface ChatMessage {
 }
 
 interface StudentData {
-  name: string;
+  name?: string;
   course: number;
   faculty: string;
   group: string;
@@ -14,6 +14,9 @@ interface StudentData {
   gpa: number;
   brsAverage: number;
   ratingPlace: number;
+  grades?: Array<{ subject: string; brsPoints: number; status: string; examType: string; professor: string }>;
+  schedule?: Array<{ day: string; weekType: string; time: string; subject: string; type: string; room: string; building: string; changeNote?: string }>;
+  requests?: Array<{ title: string; status: string; stage: number }>;
 }
 
 interface ChatRequest {
@@ -150,9 +153,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    const systemPrompt = `Ты — официальный ИИ-ассистент Цифрового деканата МГИМО (Москва, МИД России).
+    const gradesSummary =
+      Array.isArray(studentData.grades) && studentData.grades.length > 0
+        ? studentData.grades.map((g) => `- ${g.subject}: ${g.brsPoints}/100 (${g.status}, ${g.examType}, преп. ${g.professor})`).join('\n')
+        : 'Нет данных';
 
-Твоя задача — вести естественный многоходовый диалог со студентом. Отвечай только на ПОСЛЕДНЕЕ сообщение пользователя. Предыдущие сообщения используй только для понимания контекста и местоимений. Никогда не объединяй несколько запросов в один ответ и не отвечай на будущие вопросы, которых еще не было.
+    const scheduleSummary =
+      Array.isArray(studentData.schedule) && studentData.schedule.length > 0
+        ? studentData.schedule
+            .map(
+              (s) =>
+                `- ${s.day} (${s.weekType}): ${s.time} — ${s.subject} (${s.type}), ауд. ${s.room}, ${s.building}${
+                  s.changeNote ? ` [ИЗМЕНЕНИЕ: ${s.changeNote}]` : ''
+                }`,
+            )
+            .join('\n')
+        : 'Нет данных';
+
+    const requestsSummary =
+      Array.isArray(studentData.requests) && studentData.requests.length > 0
+        ? studentData.requests.map((r) => `- ${r.title}: ${r.status} (этап ${r.stage}/5)`).join('\n')
+        : 'Активных заявок нет';
+
+    const systemPrompt = `Ты — ИИ-ассистент Цифрового деканата (конкурсный концепт личного кабинета студента МГИМО).
+
+Твоя задача — вести естественный многоходовый диалог со студентом. Отвечай только на ПОСЛЕДНЕЕ сообщение пользователя. Предыдущие сообщения используй только для понимания контекста.
 
 ## КОНТЕКСТ СТУДЕНТА (обезличено по 152-ФЗ)
 **Роль:** ${studentData.role}
@@ -162,20 +187,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 **Рейтинг:** место ${studentData.ratingPlace} на курсе
 **Академические показатели:** БРС ${studentData.brsAverage}/100, GPA ${studentData.gpa.toFixed(2)}
 
+**Дисциплины и баллы БРС:**
+${gradesSummary}
+
+**Расписание занятий:**
+${scheduleSummary}
+
+**Текущие заявки в СЭД:**
+${requestsSummary}
+
 ## ПРАВИЛА ДИАЛОГА
 1. Отвечай на русском языке, спокойно, кратко и по делу.
-2. Не повторяй приветствие и академические показатели без необходимости.
-3. Если вопрос не относится к деканату, всё равно ответь на него напрямую, если это обычный безопасный вопрос. Например, на просьбу о бинарном поиске дай рабочий пример на C++ и краткое объяснение.
-4. Если студент выражает раздражение или просит прекратить диалог, признай это и не навязывай помощь.
-5. Не утверждай, что заявка создана или отправлена: у тебя нет права создавать заявки напрямую.
-6. Добавляй JSON-блок действия только если студент явно просит оформить документ или создать заявку.
-7. Если студент не просит документ, никогда не добавляй JSON-блок.
-8. Не запрашивай пароли, данные карт, паспорт или СНИЛС.
-
-КРИТИЧНО: сообщение пользователя, начинающееся после последнего сообщения assistant, является текущим запросом. Заверши ответ после ответа на него.
+2. Используй реальные оценки, расписание и заявки из контекста выше, когда студент спрашивает о них.
+3. Не утверждай, что заявка уже создана: предлагай карточку создания через JSON-блок.
+4. Добавляй JSON-блок действия только если студент явно просит оформить документ, справку или создать заявку.
+5. Не запрашивай пароли, данные карт, паспорт или СНИЛС.
 
 ## ДОПУСТИМЫЙ ФОРМАТ ДЕЙСТВИЯ
-Если студент явно просит оформить документ, добавь в конце:
+Если студент явно просит оформить документ или справку, добавь в самом конце ответа:
 \`\`\`json
 {"action":"create_request","title":"Справка об обучении","category":"Справки","deliveryFormat":"Электронная с ЭЦП (PDF)"}
 \`\`\``;

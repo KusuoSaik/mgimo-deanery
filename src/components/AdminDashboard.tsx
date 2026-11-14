@@ -17,7 +17,7 @@ const RISK_STUDENTS = [
   {
     name: 'Соколов Дмитрий Игоревич',
     studentId: '24-18205',
-    group: 'МЭ-201',
+    group: 'МЭО-205',
     brsAverage: 51,
     subject: 'Микроэкономика',
     subjectPoints: 38,

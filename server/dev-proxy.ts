@@ -16,7 +16,7 @@ interface ChatMessage {
 interface ChatRequest {
   messages: ChatMessage[];
   studentData: {
-    name: string;
+    name?: string;
     course: number;
     faculty: string;
     group: string;
@@ -24,6 +24,9 @@ interface ChatRequest {
     gpa: number;
     brsAverage: number;
     ratingPlace: number;
+    grades?: Array<{ subject: string; brsPoints: number; status: string; examType: string; professor: string }>;
+    schedule?: Array<{ day: string; weekType: string; time: string; subject: string; type: string; room: string; building: string; changeNote?: string }>;
+    requests?: Array<{ title: string; status: string; stage: number }>;
   };
 }
 
@@ -45,7 +48,7 @@ async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt:
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
-      system: systemPrompt,
+      systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: messages.map((m) => ({
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.content }],
@@ -130,9 +133,31 @@ app.post('/api/chat', async (req, res) => {
       return;
     }
 
-    const systemPrompt = `Ты — официальный ИИ-ассистент Цифрового деканата МГИМО.
+    const gradesSummary =
+      Array.isArray(studentData.grades) && studentData.grades.length > 0
+        ? studentData.grades.map((g) => `- ${g.subject}: ${g.brsPoints}/100 (${g.status}, ${g.examType}, преп. ${g.professor})`).join('\n')
+        : 'Нет данных';
 
-Твоя задача — вести естественный многоходовый диалог со студентом. Отвечай только на ПОСЛЕДНЕЕ сообщение пользователя. Предыдущие сообщения используй только для понимания контекста и местоимений. Никогда не объединяй несколько запросов в один ответ и не отвечай на будущие вопросы, которых еще не было.
+    const scheduleSummary =
+      Array.isArray(studentData.schedule) && studentData.schedule.length > 0
+        ? studentData.schedule
+            .map(
+              (s) =>
+                `- ${s.day} (${s.weekType}): ${s.time} — ${s.subject} (${s.type}), ауд. ${s.room}, ${s.building}${
+                  s.changeNote ? ` [ИЗМЕНЕНИЕ: ${s.changeNote}]` : ''
+                }`,
+            )
+            .join('\n')
+        : 'Нет данных';
+
+    const requestsSummary =
+      Array.isArray(studentData.requests) && studentData.requests.length > 0
+        ? studentData.requests.map((r) => `- ${r.title}: ${r.status} (этап ${r.stage}/5)`).join('\n')
+        : 'Активных заявок нет';
+
+    const systemPrompt = `Ты — ИИ-ассистент Цифрового деканата (конкурсный концепт личного кабинета студента МГИМО).
+
+Твоя задача — вести естественный многоходовый диалог со студентом. Отвечай только на ПОСЛЕДНЕЕ сообщение пользователя.
 
 ## КОНТЕКСТ СТУДЕНТА (обезличено по 152-ФЗ)
 **Роль:** ${studentData.role}
@@ -142,17 +167,27 @@ app.post('/api/chat', async (req, res) => {
 **Рейтинг:** место ${studentData.ratingPlace}
 **БРС:** ${studentData.brsAverage}/100, GPA ${studentData.gpa.toFixed(2)}
 
+**Дисциплины и баллы БРС:**
+${gradesSummary}
+
+**Расписание занятий:**
+${scheduleSummary}
+
+**Текущие заявки в СЭД:**
+${requestsSummary}
+
 ## ПРАВИЛА ДИАЛОГА
 1. Отвечай на русском языке, спокойно, кратко и по делу.
-2. Не повторяй приветствие и академические показатели без необходимости.
-3. Если вопрос не относится к деканату, всё равно ответь на него напрямую, если это обычный безопасный вопрос. Например, на просьбу о бинарном поиске дай рабочий пример на C++ и краткое объяснение.
-4. Если студент выражает раздражение или просит прекратить диалог, признай это и не навязывай помощь.
-5. Не утверждай, что заявка создана или отправлена: у тебя нет права создавать заявки напрямую.
-6. Добавляй JSON-блок действия только если студент явно просит оформить документ или создать заявку.
-7. Если студент не просит документ, никогда не добавляй JSON-блок.
-8. Не запрашивай пароли, данные карт, паспорт или СНИЛС.
+2. Используй реальные оценки, расписание и заявки из контекста выше.
+3. Не утверждай, что заявка уже создана: предлагай карточку создания через JSON-блок.
+4. Добавляй JSON-блок действия только если студент явно просит оформить документ или создать заявку.
+5. Не запрашивай пароли, данные карт, паспорт или СНИЛС.
 
-КРИТИЧНО: сообщение пользователя, начинающееся после последнего сообщения assistant, является текущим запросом. Заверши ответ после ответа на него.`;
+## ДОПУСТИМЫЙ ФОРМАТ ДЕЙСТВИЯ
+Если студент явно просит оформить документ или справку, добавь в самом конце ответа:
+\`\`\`json
+{"action":"create_request","title":"Справка об обучении","category":"Справки","deliveryFormat":"Электронная с ЭЦП (PDF)"}
+\`\`\``;
 
     const provider = detectApiProvider(apiKey);
     if (provider === 'unknown') {
@@ -173,13 +208,12 @@ app.post('/api/chat', async (req, res) => {
         aiResponse = await callXyvero(apiKey, process.env.AI_MODEL || 'gemini-3.8-flash', messages, systemPrompt);
       }
     } catch (apiError) {
-      console.error('❌ API call failed:', apiError);
+      console.error('API call failed:', apiError);
       res.status(502).json({ response: 'ИИ-сервис не ответил. Проверьте AI_API_KEY, AI_MODEL и настройки API-провайдера.' });
       return;
     }
 
-    // Парсинг actionable AI
-    let suggestedAction: ChatResponse['suggestedAction'];
+    let suggestedAction: { type: 'request'; title: string; category: string; deliveryFormat: string } | undefined;
     const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
       try {
@@ -206,4 +240,4 @@ app.post('/api/chat', async (req, res) => {
 });
 
 const PORT = process.env.VITE_API_PORT || 3001;
-app.listen(PORT, () => console.log(`✅ Dev proxy running on :${PORT}`));
+app.listen(PORT, () => console.log(`Dev proxy running on :${PORT}`));

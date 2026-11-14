@@ -1,21 +1,18 @@
 import type { AuthState, AuthCredentials, RegisterData, StoredAccount } from './types';
-import { ACCOUNTS_DATABASE, validatePassword } from './accountsDatabase';
+import { ACCOUNTS_DATABASE, hashPassword, validatePassword } from './accountsDatabase';
 
 const AUTH_STATE_KEY = 'mgimo_auth_state';
 const REGISTERED_ACCOUNTS_KEY = 'mgimo_registered_accounts';
-const TWO_FACTOR_VALIDITY_MS = 5 * 60 * 1000; // 5 минут
+const TWO_FACTOR_VALIDITY_MS = 5 * 60 * 1000;
 
-// Генерация 4-значного кода для 2FA
 export function generate2FACode(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// Сохранение состояния авторизации
 export function saveAuthState(state: AuthState): void {
   localStorage.setItem(AUTH_STATE_KEY, JSON.stringify(state));
 }
 
-// Загрузка состояния авторизации
 export function loadAuthState(): AuthState {
   try {
     const stored = localStorage.getItem(AUTH_STATE_KEY);
@@ -29,7 +26,6 @@ export function loadAuthState(): AuthState {
     }
     const state = JSON.parse(stored) as AuthState;
 
-    // Проверяем валидность 2FA кода
     if (state.twoFactorCode && state.twoFactorExpiry) {
       if (Date.now() > state.twoFactorExpiry) {
         state.twoFactorCode = null;
@@ -48,7 +44,6 @@ export function loadAuthState(): AuthState {
   }
 }
 
-// Получение всех зарегистрированных аккаунтов (встроенные + пользовательские)
 export function getAllAccounts(): StoredAccount[] {
   try {
     const stored = localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
@@ -59,7 +54,6 @@ export function getAllAccounts(): StoredAccount[] {
   }
 }
 
-// Сохранение нового зарегистрированного аккаунта
 export function saveNewAccount(account: StoredAccount): void {
   try {
     const stored = localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
@@ -71,17 +65,28 @@ export function saveNewAccount(account: StoredAccount): void {
   }
 }
 
-// Проверка учетных данных (шаг 1)
 export function validateCredentials(credentials: AuthCredentials): {
   success: boolean;
   account?: StoredAccount;
   error?: string;
 } {
   const allAccounts = getAllAccounts();
-  const account = allAccounts.find(acc => acc.email.toLowerCase() === credentials.email.toLowerCase());
+  const query = credentials.email.trim().toLowerCase();
+  const cleanDigits = query.replace(/\D/g, '');
+
+  const account = allAccounts.find((acc) => {
+    const emailMatch = acc.email.toLowerCase() === query;
+    const snilsDigits = acc.profile.snils.replace(/\D/g, '');
+    const phoneDigits = acc.profile.phone.replace(/\D/g, '');
+    const esiaMatch =
+      cleanDigits.length >= 9 &&
+      ((snilsDigits.length > 0 && snilsDigits === cleanDigits) ||
+        (phoneDigits.length >= 10 && phoneDigits.slice(-10) === cleanDigits.slice(-10)));
+    return emailMatch || esiaMatch;
+  });
 
   if (!account) {
-    return { success: false, error: 'Пользователь с таким email не найден' };
+    return { success: false, error: 'Пользователь с таким логином, СНИЛС или телефоном не найден' };
   }
 
   if (!validatePassword(account, credentials.password)) {
@@ -91,7 +96,6 @@ export function validateCredentials(credentials: AuthCredentials): {
   return { success: true, account };
 }
 
-// Создание 2FA сессии
 export function create2FASession(account: StoredAccount): string {
   const code = generate2FACode();
   const expiry = Date.now() + TWO_FACTOR_VALIDITY_MS;
@@ -104,14 +108,10 @@ export function create2FASession(account: StoredAccount): string {
   };
 
   saveAuthState(state);
-
-  // В реальной системе код отправляется через push-уведомление
   console.log(`[2FA] Код для ${account.email}: ${code}`);
-
   return code;
 }
 
-// Проверка 2FA кода
 export function verify2FACode(inputCode: string): {
   success: boolean;
   error?: string;
@@ -130,7 +130,6 @@ export function verify2FACode(inputCode: string): {
     return { success: false, error: 'Неверный код' };
   }
 
-  // Успешная авторизация
   const newState: AuthState = {
     isAuthenticated: true,
     currentUser: state.currentUser,
@@ -139,22 +138,17 @@ export function verify2FACode(inputCode: string): {
   };
 
   saveAuthState(newState);
-
   return { success: true };
 }
 
-// Повторная отправка 2FA кода
 export function resend2FACode(): string | null {
   const state = loadAuthState();
-
   if (!state.currentUser) {
     return null;
   }
-
   return create2FASession(state.currentUser);
 }
 
-// Выход из системы
 export function logout(): void {
   const emptyState: AuthState = {
     isAuthenticated: false,
@@ -165,41 +159,36 @@ export function logout(): void {
   saveAuthState(emptyState);
 }
 
-// Регистрация нового аккаунта
 export function registerAccount(data: RegisterData): {
   success: boolean;
   account?: StoredAccount;
   error?: string;
 } {
-  // Валидация email
   if (!data.email.endsWith('@my.mgimo.ru')) {
     return { success: false, error: 'Email должен заканчиваться на @my.mgimo.ru' };
   }
 
-  // Проверка существования аккаунта
   const allAccounts = getAllAccounts();
-  if (allAccounts.find(acc => acc.email.toLowerCase() === data.email.toLowerCase())) {
+  if (allAccounts.find((acc) => acc.email.toLowerCase() === data.email.toLowerCase())) {
     return { success: false, error: 'Аккаунт с таким email уже существует' };
   }
 
-  // Валидация пароля
   if (data.password.length < 6) {
     return { success: false, error: 'Пароль должен содержать минимум 6 символов' };
   }
 
-  // Создание нового аккаунта
   const facultyNames: Record<string, string> = {
-    'МО': 'Факультет международных отношений',
-    'МП': 'Факультет международного права',
-    'МЭО': 'Факультет международных экономических отношений',
-    'МИЭП': 'Институт маркетинга и предпринимательства',
-    'ИМТУР': 'Институт международного туризма',
-    'ФУП': 'Факультет управления и политики',
+    МО: 'Факультет международных отношений',
+    МП: 'Факультет международного права',
+    МЭО: 'Факультет международных экономических отношений',
+    МИЭП: 'Институт маркетинга и предпринимательства',
+    ИМТУР: 'Институт международного туризма',
+    ФУП: 'Факультет управления и политики',
   };
 
   const initials = data.fullName
     .split(' ')
-    .map(part => part[0])
+    .map((part) => part[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
@@ -218,7 +207,7 @@ export function registerAccount(data: RegisterData): {
   const newAccount: StoredAccount = {
     id: `acc-${crypto.randomUUID()}`,
     email: data.email,
-    passwordHash: data.password,
+    passwordHash: hashPassword(data.password),
     profile: {
       name: data.fullName,
       studentId: `26-${Math.floor(10000 + Math.random() * 89999)}`,
@@ -252,24 +241,21 @@ export function registerAccount(data: RegisterData): {
       {
         id: `msg-${crypto.randomUUID()}`,
         sender: 'ai',
-        text: `Здравствуйте, ${data.fullName.split(' ')[0]}! Я ассистент цифрового деканата МГИМО. Подскажу по расписанию, баллам БРС и помогу оформить справку — напишите, что нужно.`,
+        text: `Здравствуйте, ${data.fullName.split(' ')[0]}! Я ассистент цифрового деканата. Подскажу по расписанию, баллам БРС и помогу оформить справку — напишите, что нужно.`,
         timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
       },
     ],
   };
 
   saveNewAccount(newAccount);
-
   return { success: true, account: newAccount };
 }
 
-// Получение текущего пользователя
 export function getCurrentUser(): StoredAccount | null {
   const state = loadAuthState();
   return state.isAuthenticated ? state.currentUser : null;
 }
 
-// Проверка аутентификации
 export function isAuthenticated(): boolean {
   const state = loadAuthState();
   return state.isAuthenticated;

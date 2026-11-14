@@ -13,7 +13,7 @@ import {
   Info,
   MapPin,
   Sparkles,
-  TriangleExclamationPoint,
+  TriangleAlert,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { findUpcomingClass, formatCountdown } from '../scheduleUtils';
@@ -37,7 +37,7 @@ type DashboardViewProps = {
 
 const NOTIFICATION_STYLE: Record<NotificationItem['type'], { icon: LucideIcon; wrap: string }> = {
   info: { icon: Info, wrap: 'bg-blue-50 text-blue-600' },
-  warning: { icon: TriangleExclamationPoint, wrap: 'bg-amber-50 text-amber-600' },
+  warning: { icon: TriangleAlert, wrap: 'bg-amber-50 text-amber-600' },
   success: { icon: CircleCheck, wrap: 'bg-emerald-50 text-emerald-600' },
 };
 
@@ -180,7 +180,12 @@ export default function DashboardView({
                       <span className="text-[13px] font-medium text-slate-500">Ближайшая пара</span>
                     )}
                   </div>
-                  <Badge className={CLASS_TYPE_TONE[upcoming.item.type].badge}>{upcoming.item.type}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    {upcoming.item.changeNote && (
+                      <Badge className="border-amber-200 bg-amber-50 text-amber-700">{upcoming.item.changeNote}</Badge>
+                    )}
+                    <Badge className={CLASS_TYPE_TONE[upcoming.item.type].badge}>{upcoming.item.type}</Badge>
+                  </div>
                 </div>
 
                 <h2 className="mt-2.5 text-[17px] font-semibold leading-snug tracking-tight text-slate-900 text-balance">{upcoming.item.subject}</h2>
@@ -461,7 +466,10 @@ export default function DashboardView({
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-5 ring-1 ring-white/10">
           <Guilloche draw className="absolute -right-24 -top-20 h-80 w-80 text-amber-300/20" />
           <div className="relative flex items-start justify-between">
-            <p className="text-[13px] font-semibold text-amber-300">МГИМО МИД России</p>
+            <div>
+              <p className="text-[13px] font-semibold text-amber-300">Цифровой деканат • Концепт</p>
+              <p className="text-[10px] text-slate-400">Конкурсный прототип (неофициальный сервис)</p>
+            </div>
             <span className="tabular text-xs text-slate-400">№ {user.studentId}</span>
           </div>
           <div className="relative mt-5 flex gap-3.5">

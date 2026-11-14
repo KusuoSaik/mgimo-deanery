@@ -60,8 +60,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogou
   }, []);
 
   const personal = [
-    { label: 'Паспорт РФ', shown: user.passport, hidden: (() => { const c = user.passport.replace(/\s+/g, ''); return c.length < 5 ? '•• ••••••' : `${c.slice(0, 2)}•• •••${c.slice(-3)}`; })() },
-    { label: 'СНИЛС', shown: user.snils, hidden: `•••-•••-••• ${user.snils.slice(-2)}` },
+    {
+      label: 'Паспорт РФ',
+      shown: user.passport,
+      hidden: (() => {
+        const c = user.passport.replace(/\s+/g, '');
+        return c.length < 5 ? '•• ••••••' : `${c.slice(0, 2)}•• •••${c.slice(-3)}`;
+      })(),
+    },
+    {
+      label: 'СНИЛС',
+      shown: user.snils,
+      hidden: user.snils.length < 5 ? user.snils : `•••-•••-••• ${user.snils.slice(-2)}`,
+    },
     { label: 'Телефон', shown: user.phone, hidden: `+7 (•••) •••-••-${user.phone.slice(-2)}` },
     { label: 'Почта', shown: user.email, hidden: user.email },
   ];
@@ -83,8 +94,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogou
 
           <div className="relative flex items-start justify-between gap-3">
             <div>
-              <p className="text-[13px] font-semibold text-amber-300">МГИМО МИД России</p>
-              <p className="mt-0.5 text-xs text-slate-400">Цифровой студенческий билет</p>
+              <p className="text-[13px] font-semibold text-amber-300">Цифровой студенческий билет</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Концепт для конкурса • Не является официальным сервисом МГИМО</p>
             </div>
             <span className="tabular rounded-lg bg-white/[0.08] px-2 py-1 text-xs text-slate-200 ring-1 ring-inset ring-white/10">№ {user.studentId}</span>
           </div>

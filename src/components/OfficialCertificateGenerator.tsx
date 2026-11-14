@@ -207,7 +207,12 @@ export const OfficialCertificateGenerator = ({ user, request, onClose }: Officia
             </div>
 
             <footer className="mt-10 border-t border-slate-200 pt-3 text-center font-sans text-[10px] leading-relaxed text-slate-500">
-              {t.verify} <span className="tabular font-semibold text-slate-700">{code}</span>
+              <div>
+                {t.verify} <span className="tabular font-semibold text-slate-700">{code}</span>
+              </div>
+              <div className="mt-1 text-[9px] text-slate-400">
+                Демонстрационный макет документа для конкурсного прототипа (не является официальным документом МГИМО)
+              </div>
             </footer>
           </motion.article>
         </div>
