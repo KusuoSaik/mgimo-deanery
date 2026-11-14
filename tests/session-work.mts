@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { SessionWork, isCancelled } from '../src/auth/sessionWork.ts';
+const queue=new SessionWork();queue.begin('A');
+let unblock!:()=>void; const entered=new Promise<void>(resolve=>{unblock=resolve});
+let started!:()=>void;const starting=new Promise<void>(resolve=>{started=resolve});
+const old=queue.run(async(owner,signal)=>{assert.equal(owner,'A');started();await entered;assert(signal.aborted);return 'old'});
+let staleRan=false;const stale=queue.run(async()=>{staleRan=true;return 'stale'});
+await starting;queue.begin('B');unblock();
+assert(isCancelled(await old.catch(e=>e)));assert(isCancelled(await stale.catch(e=>e)));assert(!staleRan);
+assert.equal(await queue.run(async owner=>owner),'B');
+const order:number[]=[];await Promise.all([1,2,3].map(n=>queue.run(async()=>{order.push(n);return n})));assert.deepEqual(order,[1,2,3]);
+console.log('PASS: account-bound queue, stale cancellation, serial ordering.');

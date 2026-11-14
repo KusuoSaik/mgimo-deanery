@@ -18,6 +18,7 @@ export interface RegisterData {
 }
 
 export interface StoredAccount {
+  chatGeneration?: number;
   id: string;
   email: string;
   /**

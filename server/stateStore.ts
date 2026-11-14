@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import type { StoredDemoState } from '../api/_server.js';
-const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL, max: 3, connectionTimeoutMillis: 5000, statement_timeout: 8000 }) : null;
+export const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL, max: 3, connectionTimeoutMillis: 5000, statement_timeout: 8000 }) : null;
 const local = new Map<string, { version: number; data: StoredDemoState }>();
 export class StateConflict extends Error {}
 export class StateStoreUnavailable extends Error {}
@@ -34,4 +34,20 @@ export async function persistState(owner: string, version: number, data: StoredD
     console.error('State store persist failed:', error instanceof Error ? error.message : 'unknown error');
     throw new StateStoreUnavailable('Хранилище состояния временно недоступно.');
   }
+}
+
+/** Replay only the requested operation against the latest revision; never merge snapshots. */
+export async function mutateState<T>(owner: string, seed: StoredDemoState, operation: (state: StoredDemoState) => T) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const loaded = await loadState(owner, seed);
+    const data = structuredClone(loaded.data);
+    const result = operation(data);
+    try {
+      await persistState(owner, loaded.version, data);
+      return { data, result };
+    } catch (error) {
+      if (!(error instanceof StateConflict) || attempt === 5) throw error;
+    }
+  }
+  throw new StateConflict('Concurrent update');
 }

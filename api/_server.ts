@@ -1,4 +1,4 @@
-import { loadState, persistState, StateConflict } from '../server/stateStore.js';
+import { loadState } from '../server/stateStore.js';
 import { env } from 'node:process';
 import { createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -15,7 +15,7 @@ export type ApiResponse = ServerResponse & {
 const SESSION_COOKIE = 'mgimo_session';
 const STATE_COOKIE = 'mgimo_state';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-if (env.VERCEL && !env.SESSION_SECRET) {
+if ((env.VERCEL || env.NODE_ENV === 'production') && !env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET must be configured in the deployment environment');
 }
 const SECRET = env.SESSION_SECRET || 'local-development-only-change-this-secret';
@@ -30,6 +30,7 @@ export type StoredDemoState = {
   requests: RequestItem[];
   notifications: NotificationItem[];
   chatHistory: ChatMessage[];
+  chatGeneration?: number;
 };
 
 function cookieHeader(request: ApiRequest): string {
@@ -43,7 +44,7 @@ export function readCookies(request: ApiRequest): Record<string, string> {
     if (separator === -1) continue;
     const key = part.slice(0, separator).trim();
     const value = part.slice(separator + 1).trim();
-    if (key) result[key] = decodeURIComponent(value);
+    if (key) { try { result[key] = decodeURIComponent(value); } catch { /* Ignore malformed cookies. */ } }
   }
   return result;
 }
@@ -122,6 +123,7 @@ export function publicAccount(account: StoredAccount, state?: StoredDemoState): 
     safe.requestsData = state.requests;
     safe.notificationsData = state.notifications;
     safe.chatHistoryData = state.chatHistory;
+    safe.chatGeneration = state.chatGeneration ?? 0;
   }
   return safe;
 }
@@ -134,39 +136,8 @@ export function defaultState(account: StoredAccount): StoredDemoState {
   };
 }
 
-const versions = new WeakMap<ApiRequest, number>();
-export async function getState(request: ApiRequest, account: StoredAccount): Promise<StoredDemoState> {
-  const loaded = await loadState(account.id, defaultState(account));
-  versions.set(request, loaded.version);
-  return loaded.data;
-}
-export async function saveState(request: ApiRequest, _response: ApiResponse, state: StoredDemoState): Promise<void> {
-  const account = getAuthenticatedAccount(request);
-  if (!account) throw new Error('Unauthorized');
-  let version = versions.get(request);
-  if (version === undefined) throw new Error('Load state before updating');
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await persistState(account.id, version, state);
-      return;
-    } catch (error) {
-      if (!(error instanceof StateConflict) || attempt === 2) throw error;
-      const latest = await loadState(account.id, defaultState(account));
-      const requests = new Map(latest.data.requests.map((item) => [item.id, item]));
-      for (const item of state.requests) requests.set(item.id, item);
-      const notifications = new Map(latest.data.notifications.map((item) => [item.id, item]));
-      for (const item of state.notifications) notifications.set(item.id, item);
-      const chat = new Map(latest.data.chatHistory.map((item) => [item.id, item]));
-      for (const item of state.chatHistory) chat.set(item.id, item);
-      state = {
-        requests: [...requests.values()].slice(0, 12),
-        notifications: [...notifications.values()].slice(0, 20),
-        chatHistory: [...chat.values()].slice(-40),
-      };
-      version = latest.version;
-    }
-  }
+export async function getState(_request: ApiRequest, account: StoredAccount): Promise<StoredDemoState> {
+  return (await loadState(account.id, defaultState(account))).data;
 }
 
 export function responseHelpers(response: ApiResponse): void {
@@ -191,3 +162,12 @@ export async function readBody(request: ApiRequest): Promise<Record<string, unkn
 }
 
 export { SESSION_COOKIE, STATE_COOKIE, SESSION_TTL_MS };
+
+export function isAllowedOrigin(req: ApiRequest): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean);
+  const host = String(req.headers.host || '');
+  if (allowed.includes(origin)) return true;
+  return origin === `https://${host}` || (/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) && origin === `http://${host}`);
+}

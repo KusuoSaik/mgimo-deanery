@@ -72,13 +72,13 @@ export function findUpcomingClass(schedule: ScheduleItem[], now: Date): Upcoming
   return null;
 }
 
-export function formatCountdown(ms: number): string {
+export function formatCountdown(ms: number, locale = 'ru-RU'): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const days = Math.floor(total / 86_400);
   const hours = Math.floor((total % 86_400) / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   const clock = [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
-  if (days > 0) return `${days} д ${clock}`;
+  if (days > 0) return `${days} ${locale.startsWith('en') ? 'd' : 'д'} ${clock}`;
   return clock;
 }

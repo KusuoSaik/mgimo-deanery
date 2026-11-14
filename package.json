@@ -9,7 +9,10 @@
     "build": "tsc -b && vite build",
     "typecheck:api": "tsc -p tsconfig.api.json",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import tsx tests/state-isolation.mts && node --import tsx tests/session-work.mts && node --import tsx tests/ai-limiter.mts && node --import tsx tests/ai-api.mts",
+    "test:browser": "node tests/browser-smoke.mjs",
+    "test:ai:shared": "node --import tsx tests/ai-multiprocess.mts"
   },
   "dependencies": {
     "@fontsource-variable/onest": "^5.3.1",
@@ -38,6 +41,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
+    "playwright": "^1.65.1",
     "tsx": "^4.17.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",

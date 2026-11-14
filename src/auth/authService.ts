@@ -1,10 +1,14 @@
+import type { RequestItem } from '../types';
 import type { AuthCredentials, RegisterData, StoredAccount } from './types.js';
 
 type ApiResult = {
   authenticated?: boolean;
   account?: StoredAccount;
   error?: string;
+  createdRequest?: RequestItem;
 };
+
+export class ApiError extends Error { readonly status: number; constructor(message: string, status: number) { super(message); this.status = status; } }
 
 async function api<T extends ApiResult>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -13,7 +17,7 @@ async function api<T extends ApiResult>(path: string, init?: RequestInit): Promi
     ...init,
   });
   const data = (await response.json().catch(() => ({}))) as T;
-  if (!response.ok) throw new Error(data.error || 'Сервер временно недоступен');
+  if (!response.ok) throw new ApiError(data.error || 'Сервер временно недоступен', response.status);
   return data;
 }
 
@@ -31,24 +35,22 @@ export async function login(credentials: AuthCredentials): Promise<{ success: bo
 
 export async function getCurrentUser(): Promise<StoredAccount | null> {
   try {
-    const result = await api<{ authenticated?: boolean; account?: StoredAccount }>('/api/auth');
+    const result = await api<ApiResult>('/api/auth');
     return result.authenticated && result.account ? result.account : null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return null;
+    throw error;
   }
 }
-
 export async function logout(): Promise<void> {
   await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
 }
-
-export async function performStudentAction(action: string, payload: Record<string, unknown> = {}): Promise<StoredAccount> {
-  const result = await api<{ account?: StoredAccount; error?: string }>('/api/student', {
-    method: 'POST',
-    body: JSON.stringify({ action, ...payload }),
+export async function performStudentAction(action: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<{ account: StoredAccount; createdRequest?: RequestItem }> {
+  const result = await api<ApiResult>('/api/student', {
+    method: 'POST', signal, body: JSON.stringify({ action, ...payload }),
   });
   if (!result.account) throw new Error(result.error || 'Не удалось обновить данные');
-  return result.account;
+  return { account: result.account, createdRequest: result.createdRequest };
 }
 
 export async function registerAccount(_data: RegisterData): Promise<{ success: boolean; error?: string }> {

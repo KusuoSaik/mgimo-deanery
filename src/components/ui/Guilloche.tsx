@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from '../../motion';
 
 type Ring = { radius: number; amplitude: number; lobes: number; copies: number };
 

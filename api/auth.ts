@@ -1,11 +1,13 @@
 import type { ApiRequest, ApiResponse } from './_server.js';
-import { clearAuthCookies, findAccount, getAuthenticatedAccount, getState, issueSession, publicAccount, readBody, responseHelpers, verifyPassword } from './_server.js';
+import { clearAuthCookies, findAccount, getAuthenticatedAccount, getState, issueSession, publicAccount, readBody, responseHelpers, isAllowedOrigin, verifyPassword } from './_server.js';
 import { StateStoreUnavailable } from '../server/stateStore.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   responseHelpers(res);
   res.setHeader('Cache-Control', 'no-store');
+  if (req.method === 'POST' && !isAllowedOrigin(req)) { res.status(403).json({ error: 'Origin not allowed' }); return; }
 
+  try {
   if (req.method === 'GET') {
     const account = getAuthenticatedAccount(req);
     if (!account) {
@@ -22,7 +24,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
-  try {
     const body = await readBody(req);
     const action = typeof body.action === 'string' ? body.action : 'login';
 
@@ -45,8 +46,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       return;
     }
 
-    issueSession(req, res, account.id);
     const state = await getState(req, account);
+    issueSession(req, res, account.id);
     res.status(200).json({ authenticated: true, account: publicAccount(account, state) });
   } catch (error) {
     if (error instanceof StateStoreUnavailable) {

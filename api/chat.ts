@@ -1,7 +1,8 @@
 import { env } from 'node:process';
 import type { ApiRequest, ApiResponse } from './_server.js';
-import { getAuthenticatedAccount, getState, readBody, responseHelpers } from './_server.js';
+import { isAllowedOrigin, getAuthenticatedAccount, getState, readBody, responseHelpers } from './_server.js';
 import { AiLimitError, runLimitedAi } from '../server/aiLimiter.js';
+import { StateStoreUnavailable } from '../server/stateStore.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -9,6 +10,8 @@ interface ChatMessage {
 }
 
 interface ChatRequest {
+  language?: string;
+  ownerId?: string;
   messages: ChatMessage[];
 }
 
@@ -22,8 +25,16 @@ interface ChatResponse {
   };
 }
 
-function detectApiProvider(apiKey: string): 'gemini' | 'openai-compatible' {
-  return apiKey.startsWith('AIza') ? 'gemini' : 'openai-compatible';
+function providerError(response: Response, provider: string): AiLimitError {
+  const retry = response.headers.get('retry-after');
+  const seconds = Number(retry);
+  const parsedRetry = retry ? (Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retry) - Date.now()) : 0;
+  const retryAfterMs = Number.isFinite(parsedRetry) ? Math.max(0, parsedRetry) : 0;
+  const message = response.status === 429 ? 'Лимит провайдера ИИ исчерпан. Попробуйте позже.'
+    : [401,403].includes(response.status) ? 'ИИ недоступен: проверьте серверный ключ и доступ провайдера.'
+    : response.status === 404 ? 'ИИ недоступен: проверьте AI_MODEL на сервере.'
+    : `${provider} временно недоступен (${response.status}). Попробуйте позже.`;
+  return new AiLimitError(message, response.status, retryAfterMs);
 }
 
 type ProviderResponse = {
@@ -32,23 +43,30 @@ type ProviderResponse = {
 };
 
 async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string, signal: AbortSignal): Promise<string> {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.AI_MODEL || 'gemini-2.5-flash')}:generateContent`, {
+  const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+  for (const message of messages) {
+    const role = message.role === 'user' ? 'user' : 'model';
+    if (!message.content.trim() || (!contents.length && role === 'model')) continue;
+    const last = contents.at(-1);
+    if (last?.role === role) last.parts.push({ text: message.content });
+    else contents.push({ role, parts: [{ text: message.content }] });
+  }
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.AI_MODEL || 'gemini-3.5-flash-lite')}:generateContent`, {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: messages.map((message) => ({
-        role: message.role === 'user' ? 'user' : 'model',
-        parts: [{ text: message.content }],
-      })),
-      generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
+      contents,
+      generationConfig: { maxOutputTokens: 2048 },
     }),
   });
 
-  if (!response.ok) throw new AiLimitError('Gemini временно недоступен (' + response.status + '). Попробуйте позже.', response.status);
+  if (!response.ok) throw providerError(response, 'Gemini');
   const data = (await response.json()) as ProviderResponse;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const answer = data.candidates?.[0]?.content?.parts?.filter(part => !(part as { thought?: boolean }).thought).map(part => part.text || '').join('').trim();
+  if (!answer) throw new AiLimitError('ИИ вернул пустой ответ. Попробуйте сократить вопрос.', 502);
+  return answer;
 }
 
 async function callOpenAICompatible(
@@ -71,24 +89,18 @@ async function callOpenAICompatible(
     }),
   });
 
-  if (!response.ok) throw new AiLimitError('AI API: ' + response.status, response.status);
+  if (!response.ok) throw providerError(response, 'AI API');
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  return data.choices?.[0]?.message?.content || '';
+  const answer = data.choices?.[0]?.message?.content?.trim();
+  if (!answer) throw new AiLimitError('ИИ вернул пустой ответ. Попробуйте сократить вопрос.', 502);
+  return answer;
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   responseHelpers(res);
 
-  const allowedOrigin = env.ALLOWED_ORIGIN;
-  const requestOrigin = req.headers.origin;
-  if (allowedOrigin && requestOrigin && requestOrigin !== allowedOrigin) {
-    res.status(403).json({ response: 'Origin not allowed' });
-    return;
-  }
-  if (allowedOrigin && (!requestOrigin || requestOrigin === allowedOrigin)) {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-    res.setHeader('Vary', 'Origin');
-  }
+  res.setHeader('Cache-Control', 'no-store');
+  if (!isAllowedOrigin(req)) { res.status(403).json({ response: 'Origin not allowed' }); return; }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -118,6 +130,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       return;
     }
     const payload = body as Partial<ChatRequest>;
+    if (payload.ownerId !== account.id) { res.status(409).json({ response: 'Аккаунт изменился. Обновите страницу.' }); return; }
     const rawMessages = payload.messages;
     if (!Array.isArray(rawMessages)) {
       res.status(400).json({ response: 'Missing messages' });
@@ -127,6 +140,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       .filter((message): message is ChatMessage => Boolean(message) && typeof message === 'object' && (message as ChatMessage).role !== undefined && typeof (message as ChatMessage).content === 'string')
       .slice(-20)
       .map((message): ChatMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content.slice(0, 4000) }));
+    if (!messages.length || messages.at(-1)?.role !== 'user' || !messages.at(-1)?.content.trim()) { res.status(400).json({ response: 'Введите сообщение.' }); return; }
     const state = await getState(req, account);
     const studentData = {
       course: account.profile.course,
@@ -142,8 +156,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     };
 
     const lastQuestion = messages.at(-1)?.content.toLowerCase() || '';
-    if (/^(мои оценки|какие у меня оценки|my grades)[?!. ]*$/.test(lastQuestion)) {
-      res.status(200).json({ response: 'Учебные данные / Academic records:\n' + account.gradesData.map(g => `${g.subject}: ${g.brsPoints}/${g.maxPoints}`).join('\n') });
+    if (/^(мои оценки|какие у меня (оценки|баллы)( по БРС| БРС)?|my grades|what are my (grades|current points))[?!. ]*$/i.test(lastQuestion)) {
+      res.status(200).json({ response: (payload.language === 'en' ? 'Academic records:\n' : 'Учебные данные:\n') + account.gradesData.map(g => `${g.subject}: ${g.brsPoints}/${g.maxPoints}`).join('\n') });
       return;
     }
     const apiKey = env.AI_API_KEY;
@@ -178,7 +192,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
 Твоя задача — вести естественный многоходовый диалог со студентом. Отвечай только на ПОСЛЕДНЕЕ сообщение пользователя. Предыдущие сообщения используй только для понимания контекста.
 
-## КОНТЕКСТ СТУДЕНТА (обезличено по 152-ФЗ)
+## ВЫМЫШЛЕННЫЕ УЧЕБНЫЕ ДАННЫЕ
 **Роль:** ${studentData.role}
 **Курс:** ${studentData.course}
 **Факультет:** ${studentData.faculty}
@@ -196,7 +210,7 @@ ${scheduleSummary}
 ${requestsSummary}
 
 ## ПРАВИЛА ДИАЛОГА
-1. Отвечай на русском языке, спокойно, кратко и по делу.
+1. Отвечай ${payload.language === 'en' ? 'на английском' : 'на русском'} языке, спокойно, кратко и по делу.
 2. Используй реальные оценки, расписание и заявки из контекста выше, когда студент спрашивает о них.
 3. Не утверждай, что заявка уже создана: предлагай карточку создания через JSON-блок.
 4. Добавляй JSON-блок действия только если студент явно просит оформить документ, справку или создать заявку.
@@ -211,12 +225,13 @@ ${requestsSummary}
     let aiResponse: string;
     try {
       aiResponse = await runLimitedAi(account.id, (signal) => {
-        if (detectApiProvider(apiKey) === 'gemini') {
+        if (!env.AI_PROVIDER || env.AI_PROVIDER === 'gemini') {
           return callGemini(apiKey, messages, systemPrompt, signal);
         }
+        if (env.AI_PROVIDER !== 'openai-compatible' || !env.AI_BASE_URL || !env.AI_MODEL || !env.AI_BASE_URL.startsWith('https://')) throw new AiLimitError('Проверьте AI_PROVIDER, AI_BASE_URL и AI_MODEL на сервере.', 503);
         return callOpenAICompatible(
-          env.AI_BASE_URL || 'https://api.xyvero.space/v1',
-          env.AI_MODEL || 'gemini-3.8-flash',
+          env.AI_BASE_URL,
+          env.AI_MODEL,
           apiKey,
           messages,
           systemPrompt,
@@ -224,9 +239,10 @@ ${requestsSummary}
         );
       });
     } catch (error) {
-      console.error('API call failed:', error);
+      console.error('AI request failed', error instanceof AiLimitError ? error.statusCode : 'network');
       const status = error instanceof AiLimitError ? error.statusCode : 502;
       const message = error instanceof AiLimitError ? error.message : 'ИИ-сервис не ответил. Проверьте настройки API-провайдера.';
+      if (error instanceof AiLimitError && error.retryAfterMs) res.setHeader('Retry-After', String(Math.ceil(error.retryAfterMs / 1000)));
       res.status(status).json({ response: message });
       return;
     }
@@ -236,7 +252,7 @@ ${requestsSummary}
     if (jsonMatch) {
       try {
         const actionData = JSON.parse(jsonMatch[1]) as Record<string, string>;
-        if (actionData.action === 'create_request') {
+        if (actionData.action === 'create_request' && typeof actionData.title === 'string' && actionData.title.length <= 160 && ['Справки','Военкомат','Финансы и матпомощь','Академические'].includes(actionData.category) && ['Электронная с ЭЦП (PDF)','Бумажный оригинал в деканате'].includes(actionData.deliveryFormat)) {
           suggestedAction = {
             type: 'request',
             title: actionData.title,
@@ -252,7 +268,8 @@ ${requestsSummary}
 
     res.status(200).json({ response: aiResponse, suggestedAction });
   } catch (error) {
-    console.error('Chat API error:', error);
+    if (error instanceof StateStoreUnavailable) { res.status(503).json({ response: error.message }); return; }
+    console.error('Chat API error');
     res.status(500).json({ response: 'Извините, временные проблемы с сервером. Пожалуйста, попробуйте позже.' });
   }
 }

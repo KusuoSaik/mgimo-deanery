@@ -139,5 +139,10 @@
 .large-text [class*="text-xs"], .large-text [class*="text-sm"], .large-text [class*="text-["] { font-size: 1rem !important; line-height: 1.5 !important; }
 .high-contrast body { color: #000; background: #fff; }
 .high-contrast [class*="text-slate-4"], .high-contrast [class*="text-slate-5"], .high-contrast [class*="text-slate-6"] { color: #334155 !important; }
-.high-contrast [class*="bg-slate-9"] [class*="text-slate-"] { color: #fff !important; }
+.high-contrast [class*="bg-slate-9"] [class*="text-slate-4"] { color: #f8fafc !important; }
+.high-contrast [class*="bg-slate-9"] button[class*="text-slate-900"],
+.high-contrast [class*="bg-slate-9"] button[class*="text-slate-900"] * { color: #0f172a !important; }
 .no-motion *, .no-motion *::before, .no-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+.large-text nav > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.large-text nav button { min-width: 0; min-height: 3rem; font-size: .75rem !important; }
+.large-text .pb-24 { padding-bottom: 11rem; }

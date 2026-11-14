@@ -82,7 +82,7 @@ DATABASE_URL=<pooled TLS connection string тестовой или production б
 SESSION_SECRET=<длинная случайная строка от 32 байт>
 ALLOWED_ORIGIN=https://ваш-домен.vercel.app
 AI_API_KEY=<ключ выбранного провайдера, если нужен живой ИИ>
-AI_MODEL=gemini-2.5-flash
+AI_MODEL=gemini-3.5-flash-lite
 ```
 
 3. Framework Preset: **Vite**, Build Command: `npm run build`, Output Directory: `dist`.
@@ -91,9 +91,13 @@ AI_MODEL=gemini-2.5-flash
 
 Без `AI_API_KEY` кабинет продолжает работать: раздел ИИ показывает понятное сообщение о временной недоступности сервиса, а остальные сценарии остаются доступными. Без `DATABASE_URL` локальный memory adapter теряет данные при перезапуске; это не доказательство production-готовности.
 
-## Ограничения проверки
+## Проверка и ограничения
 
-Живой Gemini, PostgreSQL провайдера и мобильный рендер не считаются проверенными без соответствующих безопасно настроенных окружений. Очередь в памяти не является глобальным limiter’ом Vercel. Для нагрузки нужен общий limiter; retries ограничены бюджетом, неверные ключи и неподдерживаемая модель не должны маскироваться повторными попытками.
+`npm test` проверяет API, конфликты сохранения, изоляцию аккаунтов, очередь браузера и обработку ошибок ИИ. ИИ в тестах подменён. `npm run test:browser` проходит браузерные сценарии на 360/430/1280 px. Для PostgreSQL используйте отдельную тестовую базу и обе миграции; `npm run test:ai:shared` проверяет общий слот в двух Node-процессах.
+
+Общая очередь и лимиты ИИ в production хранятся в PostgreSQL, а локально без базы — в памяти. Локальный PostgreSQL и браузер проверены в пакете 005; доступ к конкретной Neon и живой Gemini требуют проверки вашего окружения. Очередь не увеличивает квоту провайдера.
+
+Настройка и команды: [docs/UPGRADE_SETUP.md](docs/UPGRADE_SETUP.md).
 
 ## Структура проекта
 
@@ -110,7 +114,8 @@ server/
   stateStore.ts         PostgreSQL/memory storage с optimistic locking
   dev-proxy.ts          локальный Express-адаптер Vercel API
 migrations/
-  001_student_state.sql PostgreSQL schema
+  001_student_state.sql Student storage
+  002_ai_runtime.sql    Shared AI limits and leases
 ```
 
 ## ИИ в процессе разработки
