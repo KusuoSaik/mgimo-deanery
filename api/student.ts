@@ -1,6 +1,6 @@
-import type { ApiRequest, ApiResponse } from './_server';
-import { getAuthenticatedAccount, getState, publicAccount, readBody, responseHelpers, saveState } from './_server';
-import type { NotificationItem, RequestItem } from '../src/types';
+import type { ApiRequest, ApiResponse } from './_server.js';
+import { getAuthenticatedAccount, getState, publicAccount, readBody, responseHelpers, saveState } from './_server.js';
+import type { NotificationItem, RequestItem } from '../src/types.js';
 
 const categories: RequestItem['category'][] = ['Справки', 'Военкомат', 'Финансы и матпомощь', 'Академические'];
 const deliveryFormats: RequestItem['deliveryFormat'][] = ['Электронная с ЭЦП (PDF)', 'Бумажный оригинал в деканате'];

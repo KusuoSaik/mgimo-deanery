@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 type Waiter = {
   resolve: (release: () => void) => void;
   reject: (error: Error) => void;
@@ -17,7 +18,7 @@ export class AiLimitError extends Error {
 }
 
 function positiveInteger(name: string, fallback: number): number {
-  const value = Number(process.env[name]);
+  const value = Number(env[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 

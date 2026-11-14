@@ -1,6 +1,7 @@
-import type { ApiRequest, ApiResponse } from './_server';
-import { getAuthenticatedAccount, getState, readBody, responseHelpers } from './_server';
-import { AiLimitError, runLimitedAi } from '../server/aiLimiter';
+import { env } from 'node:process';
+import type { ApiRequest, ApiResponse } from './_server.js';
+import { getAuthenticatedAccount, getState, readBody, responseHelpers } from './_server.js';
+import { AiLimitError, runLimitedAi } from '../server/aiLimiter.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -78,7 +79,7 @@ async function callOpenAICompatible(
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   responseHelpers(res);
 
-  const allowedOrigin = process.env.ALLOWED_ORIGIN;
+  const allowedOrigin = env.ALLOWED_ORIGIN;
   const requestOrigin = req.headers.origin;
   if (allowedOrigin && requestOrigin && requestOrigin !== allowedOrigin) {
     res.status(403).json({ response: 'Origin not allowed' });
@@ -140,7 +141,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       requests: state.requests,
     };
 
-    const apiKey = process.env.AI_API_KEY;
+    const apiKey = env.AI_API_KEY;
     if (!apiKey) {
       res.status(503).json({ response: 'ИИ-сервис временно недоступен: на сервере не настроен AI_API_KEY.' });
       return;
@@ -209,8 +210,8 @@ ${requestsSummary}
           return callGemini(apiKey, messages, systemPrompt, signal);
         }
         return callOpenAICompatible(
-          process.env.AI_BASE_URL || 'https://api.xyvero.space/v1',
-          process.env.AI_MODEL || 'gemini-3.8-flash',
+          env.AI_BASE_URL || 'https://api.xyvero.space/v1',
+          env.AI_MODEL || 'gemini-3.8-flash',
           apiKey,
           messages,
           systemPrompt,

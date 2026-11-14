@@ -1,4 +1,4 @@
-import type { AuthCredentials, RegisterData, StoredAccount } from './types';
+import type { AuthCredentials, RegisterData, StoredAccount } from './types.js';
 
 type ApiResult = {
   authenticated?: boolean;

@@ -1,4 +1,4 @@
-import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types';
+import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types.js';
 
 export type UserRole = 'Студент' | 'Староста' | 'Иностранный студент';
 export type Faculty = 'МО' | 'МП' | 'МЭО' | 'МИЭП' | 'ИМТУР' | 'ФУП';

@@ -1,9 +1,10 @@
+import { env } from 'node:process';
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ACCOUNTS_DATABASE } from '../src/auth/accountsDatabase';
-import type { ChatMessage, NotificationItem, RequestItem } from '../src/types';
-import type { StoredAccount } from '../src/auth/types';
+import { ACCOUNTS_DATABASE } from '../src/auth/accountsDatabase.js';
+import type { ChatMessage, NotificationItem, RequestItem } from '../src/types.js';
+import type { StoredAccount } from '../src/auth/types.js';
 
 export type ApiRequest = IncomingMessage & { body?: unknown; cookies?: Record<string, string> };
 export type ApiResponse = ServerResponse & {
@@ -14,10 +15,10 @@ export type ApiResponse = ServerResponse & {
 const SESSION_COOKIE = 'mgimo_session';
 const STATE_COOKIE = 'mgimo_state';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-if (process.env.VERCEL && !process.env.SESSION_SECRET) {
+if (env.VERCEL && !env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET must be configured in the deployment environment');
 }
-const SECRET = process.env.SESSION_SECRET || 'local-development-only-change-this-secret';
+const SECRET = env.SESSION_SECRET || 'local-development-only-change-this-secret';
 const KEY = createHash('sha256').update(SECRET).digest();
 
 const PASSWORD_HASHES: Record<string, string> = {

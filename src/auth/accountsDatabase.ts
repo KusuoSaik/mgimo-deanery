@@ -1,5 +1,5 @@
-import type { StoredAccount } from './types';
-import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types';
+import type { StoredAccount } from './types.js';
+import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types.js';
 
 export function hashPassword(raw: string): string {
   let h1 = 0xdeadbeef ^ raw.length;

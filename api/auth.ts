@@ -1,5 +1,5 @@
-import type { ApiRequest, ApiResponse } from './_server';
-import { clearAuthCookies, defaultState, findAccount, getAuthenticatedAccount, getState, issueSession, publicAccount, readBody, responseHelpers, saveState, verifyPassword } from './_server';
+import type { ApiRequest, ApiResponse } from './_server.js';
+import { clearAuthCookies, defaultState, findAccount, getAuthenticatedAccount, getState, issueSession, publicAccount, readBody, responseHelpers, saveState, verifyPassword } from './_server.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   responseHelpers(res);

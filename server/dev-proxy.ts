@@ -1,10 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import authHandler from '../api/auth';
-import studentHandler from '../api/student';
-import chatHandler from '../api/chat';
-import type { ApiRequest, ApiResponse } from '../api/_server';
+import authHandler from '../api/auth.js';
+import studentHandler from '../api/student.js';
+import chatHandler from '../api/chat.js';
+import type { ApiRequest, ApiResponse } from '../api/_server.js';
 
 dotenv.config();
 
