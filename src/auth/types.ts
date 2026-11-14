@@ -20,7 +20,11 @@ export interface RegisterData {
 export interface StoredAccount {
   id: string;
   email: string;
-  passwordHash: string; // В реальной системе это был бы хеш, но для демо храним как есть
+  /**
+   * Серверное поле. Оно никогда не приходит в браузер, но оставлено
+   * необязательным, чтобы seed-данные можно было использовать в API.
+   */
+  passwordHash?: string;
   profile: {
     name: string;
     studentId: string;

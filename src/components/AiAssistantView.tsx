@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, CircleCheck, KeyRound, ServerCog, ShieldCheck, Sparkles, UserX } from 'lucide-react';
-import type { ChatMessage, GradeItem, RequestItem, UserProfile, ScheduleItem, SuggestedAction } from '../types';
+import type { ChatMessage, RequestItem, UserProfile, SuggestedAction } from '../types';
 import { ActionableAICard } from './ActionableAICard';
 import { BottomSheet } from './BottomSheet';
 
@@ -10,9 +10,6 @@ type RequestFormData = Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'
 
 type AiAssistantViewProps = {
   user: UserProfile;
-  grades?: GradeItem[];
-  schedule?: ScheduleItem[];
-  requests?: RequestItem[];
   messages: ChatMessage[];
   onMessagesChange: Dispatch<SetStateAction<ChatMessage[]>>;
   onAddRequest: (request: RequestFormData) => void;
@@ -60,9 +57,6 @@ function AiMark() {
 
 export default function AiAssistantView({
   user,
-  grades = [],
-  schedule = [],
-  requests = [],
   messages,
   onMessagesChange,
   onAddRequest,
@@ -106,37 +100,6 @@ export default function AiAssistantView({
           messages: history
             .filter((_, idx) => idx > 0 || history[0]?.sender === 'user')
             .map((m) => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
-          studentData: {
-            course: user.course,
-            faculty: user.faculty,
-            group: user.group,
-            role: user.role ?? 'Студент',
-            gpa: user.gpa,
-            brsAverage: user.brsAverage,
-            ratingPlace: user.ratingPlace,
-            grades: grades.map((g) => ({
-              subject: g.subject,
-              brsPoints: g.brsPoints,
-              status: g.status,
-              examType: g.examType,
-              professor: g.professor,
-            })),
-            schedule: schedule.map((s) => ({
-              day: s.day,
-              weekType: s.weekType,
-              time: s.time,
-              subject: s.subject,
-              type: s.type,
-              room: s.room,
-              building: s.building,
-              changeNote: s.changeNote,
-            })),
-            requests: requests.map((r) => ({
-              title: r.title,
-              status: r.status,
-              stage: r.stage,
-            })),
-          },
         }),
       });
 

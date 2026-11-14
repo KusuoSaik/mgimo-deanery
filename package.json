@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"tsx server/dev-proxy.ts\" \"vite\"",
+    "dev": "concurrently \"node --import tsx server/dev-proxy.ts\" \"vite\"",
     "dev:frontend": "vite",
     "build": "tsc -b && vite build",
+    "typecheck:api": "tsc -p tsconfig.api.json",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",

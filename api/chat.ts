@@ -1,27 +1,14 @@
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { ApiRequest, ApiResponse } from './_server';
+import { getAuthenticatedAccount, getState, readBody, responseHelpers } from './_server';
+import { AiLimitError, runLimitedAi } from '../server/aiLimiter';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-interface StudentData {
-  name?: string;
-  course: number;
-  faculty: string;
-  group: string;
-  role: 'Студент' | 'Староста' | 'Иностранный студент';
-  gpa: number;
-  brsAverage: number;
-  ratingPlace: number;
-  grades?: Array<{ subject: string; brsPoints: number; status: string; examType: string; professor: string }>;
-  schedule?: Array<{ day: string; weekType: string; time: string; subject: string; type: string; room: string; building: string; changeNote?: string }>;
-  requests?: Array<{ title: string; status: string; stage: number }>;
-}
-
 interface ChatRequest {
   messages: ChatMessage[];
-  studentData: StudentData;
 }
 
 interface ChatResponse {
@@ -34,12 +21,6 @@ interface ChatResponse {
   };
 }
 
-type VercelRequest = IncomingMessage & { body?: unknown };
-type VercelResponse = ServerResponse & {
-  status: (code: number) => VercelResponse;
-  json: (data: unknown) => void;
-};
-
 function detectApiProvider(apiKey: string): 'gemini' | 'openai-compatible' {
   return apiKey.startsWith('AIza') ? 'gemini' : 'openai-compatible';
 }
@@ -49,9 +30,10 @@ type ProviderResponse = {
   choices?: Array<{ message?: { content?: string } }>;
 };
 
-async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string): Promise<string> {
+async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string, signal: AbortSignal): Promise<string> {
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -74,9 +56,11 @@ async function callOpenAICompatible(
   apiKey: string,
   messages: ChatMessage[],
   systemPrompt: string,
+  signal: AbortSignal,
 ): Promise<string> {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
@@ -91,20 +75,8 @@ async function callOpenAICompatible(
   return data.choices?.[0]?.message?.content || '';
 }
 
-function parseBody(body: unknown): ChatRequest {
-  if (body && typeof body === 'object') return body as ChatRequest;
-  throw new Error('Invalid JSON body');
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  res.status = (code: number) => {
-    res.statusCode = code;
-    return res;
-  };
-  res.json = (data: unknown) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(data));
-  };
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  responseHelpers(res);
 
   const allowedOrigin = process.env.ALLOWED_ORIGIN;
   const requestOrigin = req.headers.origin;
@@ -131,9 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   let body = req.body;
   if (!body) {
     try {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(Buffer.from(chunk));
-      body = JSON.parse(Buffer.concat(chunks).toString());
+      body = await readBody(req);
     } catch {
       res.status(400).json({ response: 'Invalid JSON body' });
       return;
@@ -141,11 +111,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   try {
-    const { messages, studentData } = parseBody(body);
-    if (!Array.isArray(messages) || !studentData) {
-      res.status(400).json({ response: 'Missing messages or studentData' });
+    const account = getAuthenticatedAccount(req);
+    if (!account) {
+      res.status(401).json({ response: 'Сессия истекла. Войдите снова.' });
       return;
     }
+    const payload = body as Partial<ChatRequest>;
+    const rawMessages = payload.messages;
+    if (!Array.isArray(rawMessages)) {
+      res.status(400).json({ response: 'Missing messages' });
+      return;
+    }
+    const messages = rawMessages
+      .filter((message): message is ChatMessage => Boolean(message) && typeof message === 'object' && (message as ChatMessage).role !== undefined && typeof (message as ChatMessage).content === 'string')
+      .slice(-20)
+      .map((message): ChatMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content.slice(0, 4000) }));
+    const state = getState(req, account);
+    const studentData = {
+      course: account.profile.course,
+      faculty: account.profile.faculty,
+      group: account.profile.group,
+      role: account.profile.role,
+      gpa: account.profile.gpa,
+      brsAverage: account.profile.brsAverage,
+      ratingPlace: account.profile.ratingPlace,
+      grades: account.gradesData,
+      schedule: account.scheduleData,
+      requests: state.requests,
+    };
 
     const apiKey = process.env.AI_API_KEY;
     if (!apiKey) {
@@ -211,20 +204,24 @@ ${requestsSummary}
 
     let aiResponse: string;
     try {
-      if (detectApiProvider(apiKey) === 'gemini') {
-        aiResponse = await callGemini(apiKey, messages, systemPrompt);
-      } else {
-        aiResponse = await callOpenAICompatible(
+      aiResponse = await runLimitedAi(account.id, (signal) => {
+        if (detectApiProvider(apiKey) === 'gemini') {
+          return callGemini(apiKey, messages, systemPrompt, signal);
+        }
+        return callOpenAICompatible(
           process.env.AI_BASE_URL || 'https://api.xyvero.space/v1',
           process.env.AI_MODEL || 'gemini-3.8-flash',
           apiKey,
           messages,
           systemPrompt,
+          signal,
         );
-      }
+      });
     } catch (error) {
       console.error('API call failed:', error);
-      res.status(502).json({ response: 'ИИ-сервис не ответил. Проверьте AI_API_KEY, AI_MODEL и настройки API-провайдера.' });
+      const status = error instanceof AiLimitError ? error.statusCode : 502;
+      const message = error instanceof AiLimitError ? error.message : 'ИИ-сервис не ответил. Проверьте настройки API-провайдера.';
+      res.status(status).json({ response: message });
       return;
     }
 

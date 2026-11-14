@@ -1,18 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRightLeft, ChevronRight, Eye, EyeOff, LogOut, RotateCcw, ShieldCheck, Smartphone } from 'lucide-react';
+import { Eye, EyeOff, LogOut, RotateCcw, ShieldCheck, Smartphone } from 'lucide-react';
 import type { UserProfile } from '../types';
-import type { StoredAccount } from '../auth/types';
-import { getAllAccounts } from '../auth/authService';
 import { Avatar, CountUp, PageHeader } from './ui/primitives';
 import { Guilloche } from './ui/Guilloche';
 import { PseudoQr } from './ui/PseudoQr';
 
 export interface ProfileViewProps {
   user: UserProfile;
-  account: StoredAccount;
   onLogout: () => void;
-  onSwitchAccount: (account: StoredAccount) => void;
   onResetDemoData: () => void;
 }
 
@@ -39,12 +35,10 @@ function TimerRing({ value }: { value: number }) {
   );
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogout, onSwitchAccount, onResetDemoData }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onResetDemoData }) => {
   const [privacyMode, setPrivacyMode] = useState(true);
   const [qrCounter, setQrCounter] = useState(QR_PERIOD);
   const [qrToken, setQrToken] = useState('MGIMO-PASS-8841');
-  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
-  const otherAccounts = getAllAccounts().filter((acc) => acc.id !== account.id);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -225,54 +219,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, account, onLogou
         </section>
 
         <section className="card overflow-hidden">
-          {otherAccounts.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowAccountSwitcher((value) => !value)}
-                aria-expanded={showAccountSwitcher}
-                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50"
-              >
-                <ArrowRightLeft className="h-[18px] w-[18px] text-slate-400" />
-                <span className="flex-1 text-sm font-medium text-slate-900">Сменить аккаунт</span>
-                <motion.span animate={{ rotate: showAccountSwitcher ? 90 : 0 }} transition={{ duration: 0.2 }}>
-                  <ChevronRight className="h-4 w-4 text-slate-300" />
-                </motion.span>
-              </button>
-              <AnimatePresence initial={false}>
-                {showAccountSwitcher && (
-                  <motion.ul
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                    className="overflow-hidden bg-slate-50"
-                  >
-                    {otherAccounts.map((acc) => (
-                      <li key={acc.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onSwitchAccount(acc);
-                            setShowAccountSwitcher(false);
-                          }}
-                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-slate-100"
-                        >
-                          <Avatar src={acc.profile.avatarUrl} name={acc.profile.name} size={32} className="rounded-[10px]" />
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium text-slate-900">{acc.profile.name}</span>
-                            <span className="block text-xs text-slate-500">
-                              {acc.profile.course} курс, {acc.profile.group}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </motion.ul>
-                )}
-              </AnimatePresence>
-            </>
-          )}
           <button
             type="button"
             onClick={onResetDemoData}
