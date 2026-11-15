@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Local patch payloads and installer backups
+/patch/
+/.patch-backups/

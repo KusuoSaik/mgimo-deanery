@@ -1,34 +1,17 @@
 import { useUI } from '../i18n';
 import { motion } from '../motion';
 import { AnimatePresence } from 'framer-motion';
-import { Check, FastForward, ShieldCheck } from 'lucide-react';
+import { Check, ShieldCheck } from 'lucide-react';
 import type { RequestItem } from '../types';
 import { REQUEST_STAGES } from './ui/tokens';
 interface LiveRequestTrackerProps {
     request: RequestItem;
-    onStageChange: (request: RequestItem) => void;
+    onStageChange?: (request: RequestItem) => void;
 }
 const STAMP_KEYS = ['registered', 'inReview', 'inSigning', 'signed', 'ready'] as const;
-export const LiveRequestTracker = ({ request, onStageChange }: LiveRequestTrackerProps) => {
+export const LiveRequestTracker = ({ request }: LiveRequestTrackerProps) => {
     const uiT = useUI();
     const currentStage = request.stage || 1;
-    const handleAdvanceStage = () => {
-        if (currentStage >= 5)
-            return;
-        const next = REQUEST_STAGES[currentStage];
-        const stamp = new Date().toLocaleString(uiT.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-        const updated: RequestItem = {
-            ...request,
-            stage: next.stage,
-            status: next.status,
-            updatedAt: stamp,
-            timestamps: { ...request.timestamps, [STAMP_KEYS[next.stage - 1]]: stamp },
-        };
-        if (next.stage === 5 && !updated.verificationQrCode) {
-            updated.verificationQrCode = `MGIMO-${request.id.slice(-6).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
-        }
-        onStageChange(updated);
-    };
     return (<div>
       <ol className="relative">
         {uiT(REQUEST_STAGES.map((stage, index) => {
@@ -67,16 +50,11 @@ export const LiveRequestTracker = ({ request, onStageChange }: LiveRequestTracke
         }))}
       </ol>
 
-      <AnimatePresence initial={false}>
-        {uiT(currentStage < 5 && (<motion.button key="advance" type="button" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} onClick={handleAdvanceStage} className="pressable mt-4 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-[13px] font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
-            <FastForward className="h-4 w-4"/>{uiT("Демо: следующий этап")}</motion.button>))}
-      </AnimatePresence>
-
       <AnimatePresence>
         {uiT(request.verificationQrCode && (<motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4 flex items-start gap-3 rounded-xl bg-emerald-50 p-3.5 ring-1 ring-inset ring-emerald-200">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600"/>
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-emerald-900">{uiT("Код проверки подлинности")}</p>
+              <p className="text-[13px] font-medium text-emerald-900">{uiT("Демонстрационный код")}</p>
               <p className="tabular mt-0.5 break-all text-sm font-semibold tracking-wide text-emerald-700">{uiT(request.verificationQrCode)}</p>
               <p className="mt-1 text-xs text-emerald-700/70">{uiT("Демо-код (внешняя проверка не подключена):")}</p>
             </div>

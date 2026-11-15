@@ -1,3 +1,6 @@
+import { DEMO_STAFF } from '../server/demoStaff.js';
+import { availableSlots, academicResults, directionFor, requestDetails } from '../src/portalDomain.js';
+import type { RequestDetails, Consultation } from '../src/portalDomain.js';
 import { loadState } from '../server/stateStore.js';
 import { env } from 'node:process';
 import { createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
@@ -21,6 +24,7 @@ if ((env.VERCEL || env.NODE_ENV === 'production') && !env.SESSION_SECRET) {
 const SECRET = env.SESSION_SECRET || 'local-development-only-change-this-secret';
 
 const PASSWORD_HASHES: Record<string, string> = {
+  'dean.demo@my.mgimo.ru': 'b02bb122b9d36441824dd0ebc3a3dfb2087d272a1974e13661266d637e31baea4e07047d59135545ffff4a4a83f33a91cfe5835c5e466adc7e84f3e27787d246',
   'a.volkov@my.mgimo.ru': '9b074d04acd3dbee379be3247115d302ae00ebfca888d6eab3e94422be4b3b3c2d6406206a25cc159c52e9302c4d7c024a890d12008d184569364a2ea542316e',
   'd.sokolov@my.mgimo.ru': 'c1c6e7d14ec3502a3ba50085c33cb39e5719eff31066bb3e6529b22d5c03e9eefad512b8b0ac268fb4d069af7df4f4adcf7b5434a0d1a8cc566046dcbeed1262',
   's.chen@my.mgimo.ru': 'c6ab04938030869ad2d3e5107ab49218c68a791500f2cbc7ef651cf75cedc81004c7a698613bcaf8537d6c811070bc38aae85a6eaa8799643390e0d7b9f4d9f1',
@@ -31,6 +35,8 @@ export type StoredDemoState = {
   notifications: NotificationItem[];
   chatHistory: ChatMessage[];
   chatGeneration?: number;
+  requestDetails?: Record<string, RequestDetails>;
+  consultations?: Consultation[];
 };
 
 function cookieHeader(request: ApiRequest): string {
@@ -93,7 +99,7 @@ export function issueSession(request: ApiRequest, response: ApiResponse, userId:
 export function findAccount(login: string): StoredAccount | undefined {
   const query = login.trim().toLowerCase();
   const digits = query.replace(/\D/g, '');
-  return ACCOUNTS_DATABASE.find((account) => {
+  return [...ACCOUNTS_DATABASE, DEMO_STAFF].find((account) => {
     const emailMatch = account.email.toLowerCase() === query;
     const snils = account.profile.snils.replace(/\D/g, '');
     const phone = account.profile.phone.replace(/\D/g, '');
@@ -113,12 +119,18 @@ export function verifyPassword(account: StoredAccount, password: string): boolea
 export function getAuthenticatedAccount(request: ApiRequest): StoredAccount | null {
   const session = verifySession(readCookies(request)[SESSION_COOKIE]);
   if (!session) return null;
-  return ACCOUNTS_DATABASE.find((account) => account.id === session.userId) || null;
+  return [...ACCOUNTS_DATABASE, DEMO_STAFF].find((account) => account.id === session.userId) || null;
 }
 
 export function publicAccount(account: StoredAccount, state?: StoredDemoState): Omit<StoredAccount, 'passwordHash'> {
   const safe = { ...account } as Omit<StoredAccount, 'passwordHash'>;
   delete (safe as StoredAccount).passwordHash;
+  safe.accessRole = account.accessRole ?? 'student';
+  safe.direction = directionFor(account.profile.group);
+  safe.academicResultsData = academicResults(account.gradesData, account.profile.course, account.id);
+  safe.consultationsData = state?.consultations ?? [];
+  safe.consultationSlotsData = Object.fromEntries(account.gradesData.map(g => [g.id, availableSlots(g.id)]));
+  safe.requestDetailsData = Object.fromEntries((state?.requests ?? account.requestsData).map(r => [r.id, requestDetails(r, state?.requestDetails?.[r.id])]));
   if (state) {
     safe.requestsData = state.requests;
     safe.notificationsData = state.notifications;
@@ -130,6 +142,8 @@ export function publicAccount(account: StoredAccount, state?: StoredDemoState): 
 
 export function defaultState(account: StoredAccount): StoredDemoState {
   return {
+    requestDetails: {},
+    consultations: [],
     requests: account.requestsData,
     notifications: account.notificationsData,
     chatHistory: account.chatHistoryData,

@@ -1,19 +1,6 @@
 import type { StoredAccount } from './types.js';
 import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types.js';
 
-export function hashPassword(raw: string): string {
-  let h1 = 0xdeadbeef ^ raw.length;
-  let h2 = 0x41c6ce57 ^ raw.length;
-  for (let i = 0; i < raw.length; i += 1) {
-    const ch = raw.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return `sha256$${(h2 >>> 0).toString(16).padStart(8, '0')}${(h1 >>> 0).toString(16).padStart(8, '0')}`;
-}
-
 const createAvatar = (initials: string, bgColor: string, textColor: string) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" fill="${bgColor}"/><text x="40" y="48" text-anchor="middle" font-size="26" font-family="Arial,sans-serif" fill="${textColor}">${initials}</text></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -22,7 +9,6 @@ const createAvatar = (initials: string, bgColor: string, textColor: string) => {
 const alekseyVolkovAccount: StoredAccount = {
   id: 'acc-001',
   email: 'a.volkov@my.mgimo.ru',
-  passwordHash: hashPassword('mgimo2026'),
   profile: {
     name: 'Волков Алексей Дмитриевич',
     studentId: '22-15942',
@@ -74,7 +60,6 @@ const alekseyVolkovAccount: StoredAccount = {
 const dmitriySokolovAccount: StoredAccount = {
   id: 'acc-002',
   email: 'd.sokolov@my.mgimo.ru',
-  passwordHash: hashPassword('debt1234'),
   profile: {
     name: 'Соколов Дмитрий Игоревич',
     studentId: '24-18205',
@@ -124,7 +109,6 @@ const dmitriySokolovAccount: StoredAccount = {
 const sofiaChenAccount: StoredAccount = {
   id: 'acc-003',
   email: 's.chen@my.mgimo.ru',
-  passwordHash: hashPassword('china2025'),
   profile: {
     name: 'Чен София (陈晓雅)',
     studentId: '25-19874',
@@ -179,8 +163,4 @@ export const ACCOUNTS_DATABASE: StoredAccount[] = [
 
 export function findAccountByEmail(email: string): StoredAccount | undefined {
   return ACCOUNTS_DATABASE.find((acc) => acc.email.toLowerCase() === email.toLowerCase());
-}
-
-export function validatePassword(account: StoredAccount, password: string): boolean {
-  return account.passwordHash === hashPassword(password) || account.passwordHash === password;
 }

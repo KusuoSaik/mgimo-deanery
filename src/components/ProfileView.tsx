@@ -10,6 +10,7 @@ import { Guilloche } from './ui/Guilloche';
 import { PseudoQr } from './ui/PseudoQr';
 export interface ProfileViewProps {
     user: UserProfile;
+    direction?: string;
     onLogout: () => void;
     onResetDemoData: () => void;
 }
@@ -24,7 +25,7 @@ function TimerRing({ value }: {
       <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-amber-400 transition-[stroke-dashoffset] duration-1000 ease-linear" strokeDasharray={c} strokeDashoffset={c * (1 - value / QR_PERIOD)}/>
     </svg>);
 }
-export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onResetDemoData }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ user, direction, onLogout, onResetDemoData }) => {
     const uiT = useUI();
     const { large, setLarge, contrast, setContrast, still, setStill } = usePreferences();
     const [privacyMode, setPrivacyMode] = useState(true);
@@ -105,6 +106,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onRese
           </div>
         </motion.section>
 
+        <section className="card p-4"><h2 className="text-xs text-slate-500">{uiT("Направление подготовки")}</h2><p className="mt-1 text-sm font-medium text-slate-900">{direction}</p></section>
         <section className="grid grid-cols-3 gap-2">
           {uiT([
             { label: 'БРС', value: user.brsAverage, decimals: 0, tone: 'text-slate-900' },

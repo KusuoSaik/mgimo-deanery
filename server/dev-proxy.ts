@@ -4,6 +4,7 @@ import cors from 'cors';
 import authHandler from '../api/auth.js';
 import studentHandler from '../api/student.js';
 import chatHandler from '../api/chat.js';
+import staffHandler from '../api/staff.js';
 import type { ApiRequest, ApiResponse } from '../api/_server.js';
 
 
@@ -21,6 +22,7 @@ function invoke(handler: (req: ApiRequest, res: ApiResponse) => Promise<void>) {
 app.all('/api/auth', invoke(authHandler));
 app.all('/api/student', invoke(studentHandler));
 app.all('/api/chat', invoke(chatHandler));
+app.all('/api/staff', invoke(staffHandler));
 
 const PORT = Number(process.env.VITE_API_PORT || 3001);
 app.listen(PORT, () => console.log(`Secure demo API running on :${PORT}`));

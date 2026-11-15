@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useUI } from '../i18n';
 import { useEffect, useState } from 'react';
 import { motion } from '../motion';
@@ -19,7 +20,8 @@ type DashboardViewProps = {
     onNavigate: (tab: TabType) => void;
     onMarkNotificationRead: (id: string) => void;
     onMarkAllNotificationsRead: () => void;
-    onDemoCompleteRequest: () => void;
+    priorities?: ReactNode;
+    onOpenRequest: (id: string) => void;
 };
 const NOTIFICATION_STYLE: Record<NotificationItem['type'], {
     icon: LucideIcon;
@@ -42,7 +44,7 @@ function dayLabel(date: Date, now: Date, locale = 'ru-RU'): string {
     const text = date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
-export default function DashboardView({ user, schedule, notifications, requests, onNavigate, onMarkNotificationRead, onMarkAllNotificationsRead, onDemoCompleteRequest, }: DashboardViewProps) {
+export default function DashboardView({ user, schedule, notifications, requests, onNavigate, onMarkNotificationRead, onMarkAllNotificationsRead, priorities, onOpenRequest, }: DashboardViewProps) {
     const uiT = useUI();
     const [now, setNow] = useState(() => new Date());
     const [studakOpen, setStudakOpen] = useState(false);
@@ -114,6 +116,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
       </PageHeader>
 
       <div className="relative -mt-9 space-y-6 px-4">
+        {priorities}
         <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.18, ease: [0.22, 1, 0.36, 1] }} className="card overflow-hidden p-0 shadow-[var(--shadow-lift)]">
           {uiT(upcoming ? (<>
               <div className="p-4 pb-3">
@@ -174,9 +177,9 @@ export default function DashboardView({ user, schedule, notifications, requests,
               <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${color}`}>
                 <Icon className="h-[18px] w-[18px]" aria-hidden="true"/>
               </span>
-              <span className="min-w-0">
+              <span className="min-w-0 w-full">
                 <span className="block text-sm font-medium text-slate-900">{uiT(label)}</span>
-                <span className="mt-0.5 block truncate text-xs text-slate-500">{uiT(hint)}</span>
+                <span className="mt-0.5 block break-words text-xs text-slate-500">{uiT(hint)}</span>
               </span>
             </button>)))}
         </section>
@@ -203,8 +206,8 @@ export default function DashboardView({ user, schedule, notifications, requests,
                       <Icon className="h-4 w-4" aria-hidden="true"/>
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className={`text-sm leading-snug tracking-tight ${item.isRead ? 'font-medium text-slate-600' : 'font-semibold text-slate-900'}`}>
+                      <div className="flex flex-col items-start gap-1">
+                        <h3 className={`min-w-0 break-words text-sm leading-snug tracking-tight ${item.isRead ? 'font-medium text-slate-600' : 'font-semibold text-slate-900'}`}>
                           {uiT(item.title)}
                         </h3>
                         <span className="mt-0.5 flex shrink-0 items-center gap-1.5 text-xs text-slate-400">
@@ -233,7 +236,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
           <SectionTitle action={<button type="button" onClick={() => onNavigate('requests')} className="text-[13px] font-medium text-blue-600 hover:text-blue-700">{uiT("Все заявки")}</button>}>{uiT("Активные заявки")}</SectionTitle>
           {uiT(activeRequests.length === 0 ? (<EmptyState icon={FileText} title={uiT("Сейчас нет заявок в работе")} hint={uiT("Новую справку можно заказать в разделе «Заявки»")}/>) : (<ul className="card divide-y divide-slate-100 overflow-hidden">
               {uiT(activeRequests.slice(0, 3).map((item) => (<li key={item.id}>
-                  <button type="button" onClick={() => onNavigate('requests')} className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50">
+                  <button type="button" onClick={() => onOpenRequest(item.id)} className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-900">{uiT(item.title)}</p>
                       <div className="mt-2 flex gap-1" aria-label={uiT(`Этап ${item.stage} из 5`)}>
@@ -245,7 +248,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
                 </li>)))}
             </ul>))}
 
-          {uiT(activeRequests.length > 0 && (<button type="button" onClick={onDemoCompleteRequest} className="pressable w-full rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-[13px] font-medium text-slate-500 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">{uiT("Демо: перевести заявку в «Готово к выдаче»")}</button>))}
+
         </section>
       </div>
 

@@ -1,24 +1,23 @@
+import type { ReactNode } from 'react';
 import { useUI } from '../i18n';
 import { useState } from 'react';
 import { motion } from '../motion';
-import { AnimatePresence } from 'framer-motion';
-import { CalendarCheck, Check, ChevronRight } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import type { GradeItem } from '../types';
 import { BottomSheet } from './BottomSheet';
 import { Badge, CountUp } from './ui/primitives';
-import { GRADE_STATUS_TONE, SPRING } from './ui/tokens';
+import { GRADE_STATUS_TONE } from './ui/tokens';
 interface InteractiveGradeCardProps {
     item: GradeItem;
     index: number;
     isAtRisk?: boolean;
+    initialOpen?: boolean;
+    onClose?: () => void;
+    booking?: ReactNode;
+    result?: ReactNode;
 }
 const ADMISSION = 70;
 const AUTO_PASS = 90;
-const CONSULT_SLOTS = [
-    { id: '2026-11-15', day: '15 ноя', time: '14:00' },
-    { id: '2026-11-16', day: '16 ноя', time: '10:00' },
-    { id: '2026-11-17', day: '17 ноя', time: '15:00' },
-];
 const RECOMMENDATIONS: Record<GradeItem['status'], string[]> = {
     'Требует внимания': [
         'Сходите на консультацию к преподавателю',
@@ -42,11 +41,9 @@ function Ring({ value, max, className }: {
       <motion.circle cx="50" cy="50" r={radius} fill="none" strokeWidth="8" strokeLinecap="round" className={className} strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: circumference * (1 - ratio) }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}/>
     </svg>);
 }
-export const InteractiveGradeCard = ({ item, index, isAtRisk }: InteractiveGradeCardProps) => {
+export const InteractiveGradeCard = ({ item, index, initialOpen = false, onClose, booking, result }: InteractiveGradeCardProps) => {
     const uiT = useUI();
-    const [isOpen, setIsOpen] = useState(false);
-    const [slot, setSlot] = useState<string | null>(null);
-    const [booked, setBooked] = useState(false);
+    const [isOpen, setIsOpen] = useState(initialOpen);
     const tone = GRADE_STATUS_TONE[item.status];
     const percentage = (item.brsPoints / item.maxPoints) * 100;
     const examLabel = item.examType === 'Зачет' ? 'Зачёт' : 'Экзамен';
@@ -88,7 +85,7 @@ export const InteractiveGradeCard = ({ item, index, isAtRisk }: InteractiveGrade
         </div>
       </motion.button>
 
-      <BottomSheet isOpen={isOpen} onClose={() => setIsOpen(false)} title={uiT(item.subject)} subtitle={uiT(`${examLabel}, ${item.professor}`)}>
+      <BottomSheet isOpen={isOpen} onClose={() => { setIsOpen(false); onClose?.(); }} title={uiT(item.subject)} subtitle={uiT(`${examLabel}, ${item.professor}`)}>
         <div className="space-y-5">
           <div className="flex items-center gap-5 rounded-2xl bg-slate-50 p-4 ring-1 ring-inset ring-slate-100">
             <div className="relative">
@@ -113,28 +110,8 @@ export const InteractiveGradeCard = ({ item, index, isAtRisk }: InteractiveGrade
             </div>
           </div>
 
-          {uiT(isAtRisk && item.status === 'Требует внимания' && (<section className="rounded-2xl bg-amber-50 p-4 ring-1 ring-inset ring-amber-200">
-              <h4 className="text-[15px] font-semibold tracking-tight text-amber-950">{uiT("Записаться на консультацию")}</h4>
-              <p className="mt-0.5 text-[13px] text-amber-900/70">{uiT("Свободные окна у преподавателя")}</p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {uiT(CONSULT_SLOTS.map((option) => {
-                const active = slot === option.id;
-                return (<button key={option.id} type="button" disabled={booked} onClick={() => setSlot(option.id)} className={`relative rounded-xl px-2 py-2.5 text-center transition-colors ${active ? 'text-white' : 'bg-white text-slate-700 ring-1 ring-inset ring-amber-200 hover:ring-amber-300'}`}>
-                      {uiT(active && <motion.span layoutId={`slot-${item.id}`} transition={SPRING} className="absolute inset-0 rounded-xl bg-amber-600"/>)}
-                      <span className="relative block text-sm font-semibold">{uiT(option.day)}</span>
-                      <span className={`tabular relative block text-xs ${active ? 'text-amber-100' : 'text-slate-500'}`}>{uiT(option.time)}</span>
-                    </button>);
-            }))}
-              </div>
-              <button type="button" disabled={!slot || booked} onClick={() => setBooked(true)} className={`pressable mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${booked ? 'bg-emerald-600' : 'bg-amber-600 hover:bg-amber-700 disabled:bg-amber-600/40'}`}>
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.span key={String(booked)} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="inline-flex items-center gap-2">
-                    {uiT(booked ? <Check className="h-4 w-4" strokeWidth={3}/> : <CalendarCheck className="h-4 w-4"/>)}
-                    {uiT(booked ? 'Вы записаны' : 'Записаться')}
-                  </motion.span>
-                </AnimatePresence>
-              </button>
-            </section>))}
+          {result}
+          {booking}
 
           <section>
             <h4 className="text-[15px] font-semibold tracking-tight text-slate-900">{uiT("Что делать дальше")}</h4>

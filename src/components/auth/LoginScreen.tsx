@@ -12,9 +12,10 @@ export interface LoginScreenProps {
 }
 type AuthMethod = 'mgimo' | 'esia';
 const DEMO_ACCOUNTS = [
-    { name: 'Алексей Волков', hint: 'Староста, отличник', initials: 'АВ', tone: 'bg-blue-900 text-amber-300', email: 'a.volkov@my.mgimo.ru', identity: '158-472-836 21', pass: 'mgimo2026' },
-    { name: 'Дмитрий Соколов', hint: 'Есть долги по БРС', initials: 'ДС', tone: 'bg-amber-900/70 text-amber-200', email: 'd.sokolov@my.mgimo.ru', identity: '172-583-947 45', pass: 'debt1234' },
-    { name: 'София Чен', hint: 'Иностранная студентка', initials: 'СЧ', tone: 'bg-emerald-900/70 text-emerald-200', email: 's.chen@my.mgimo.ru', identity: '+7 (999) 782-34-91', pass: 'china2025' },
+    { name: 'Алексей Волков', hint: 'Староста, отличник', initials: 'АВ', tone: 'bg-blue-900 text-amber-300', email: 'a.volkov@my.mgimo.ru', identity: '158-472-836 21' },
+    { name: 'Дмитрий Соколов', hint: 'Есть долги по БРС', initials: 'ДС', tone: 'bg-amber-900/70 text-amber-200', email: 'd.sokolov@my.mgimo.ru', identity: '172-583-947 45' },
+    { name: 'София Чен', hint: 'Иностранная студентка', initials: 'СЧ', tone: 'bg-emerald-900/70 text-emerald-200', email: 's.chen@my.mgimo.ru', identity: '+7 (999) 782-34-91' },
+    { name: 'Марина Орлова', hint: 'Сотрудник деканата', initials: 'МО', tone: 'bg-indigo-900 text-white', email: 'dean.demo@my.mgimo.ru', identity: 'dean.demo@my.mgimo.ru' },
 ];
 const inputBase = 'w-full rounded-xl border bg-slate-950/50 py-3 text-[15px] text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 focus:bg-slate-950/70 focus:ring-4 focus:ring-blue-500/15';
 function Field({ label, htmlFor, children }: {
@@ -55,9 +56,9 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
         }
         onLoginSuccess(result.account);
     }
-    function fillDemo(email: string, identity: string, pass = '') {
+    function fillDemo(email: string, identity: string) {
         setLoginValue(authMethod === 'esia' ? identity : email);
-        setPassword(pass);
+        setPassword('');
         setLoginError('');
         setPanel('login');
     }
@@ -101,7 +102,7 @@ export const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
             </>))}
         </motion.div>
 
-        {uiT(panel === 'login' && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-6"><p className="mb-2 px-1 text-xs text-slate-500">{uiT("Демо-аккаунты: подставляем логин, пароль указан в README")}</p><div className="overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.08]">{uiT(DEMO_ACCOUNTS.map((demo, index) => { const active = loginValue === demo.email || loginValue === demo.identity; return <button key={demo.email} type="button" onClick={() => fillDemo(demo.email, demo.identity, demo.pass)} className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] ${index > 0 ? 'border-t border-white/[0.06]' : ''}`}><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold ${demo.tone}`}>{uiT(demo.initials)}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-100">{uiT(demo.name)}</span><span className="block text-xs text-slate-500">{uiT(demo.hint)}</span></span>{uiT(active && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-slate-900"><Check className="h-3 w-3" strokeWidth={3}/></span>)}</button>; }))}</div></motion.div>)}
+        {uiT(panel === 'login' && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-6"><p className="mb-2 px-1 text-xs text-slate-500">{uiT("Демо-аккаунты: подставляем логин, пароль указан в README")}</p><div className="overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.08]">{uiT(DEMO_ACCOUNTS.map((demo, index) => { const active = loginValue === demo.email || loginValue === demo.identity; return <button key={demo.email} type="button" onClick={() => fillDemo(demo.email, demo.identity)} className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] ${index > 0 ? 'border-t border-white/[0.06]' : ''}`}><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold ${demo.tone}`}>{uiT(demo.initials)}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-100">{uiT(demo.name)}</span><span className="block text-xs text-slate-500">{uiT(demo.hint)}</span></span>{uiT(active && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-slate-900"><Check className="h-3 w-3" strokeWidth={3}/></span>)}</button>; }))}</div></motion.div>)}
       </div>
 
       <footer className="relative mx-auto flex w-full max-w-sm flex-col items-center justify-center gap-1 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center text-xs text-slate-500"><span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-500/80"/>{uiT("Вымышленные демо-данные • Сессия защищена cookie")}</span><span className="text-[11px] text-slate-600">{uiT("Концепт для конкурса «Цифровой деканат будущего»")}</span></footer>

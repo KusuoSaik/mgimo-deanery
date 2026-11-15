@@ -1,3 +1,6 @@
+import type { RequestDetails } from '../portalDomain';
+import { requestDetails, requestLabel, isActiveRequest } from '../portalDomain';
+import RequestConversation from './RequestConversation';
 import { useUI } from '../i18n';
 import { useRef } from 'react';
 import { useMemo, useState } from 'react';
@@ -20,8 +23,10 @@ type RequestsViewProps = {
     requests: RequestItem[];
     onAddRequest: (request: RequestFormData) => Promise<RequestItem>;
     onUpdateRequest?: (request: RequestItem) => void;
+    details?: Record<string, RequestDetails>;
+    onAction?: (action: string, payload: Record<string, unknown>) => Promise<unknown>;
 };
-type StatusFilter = RequestItem['status'] | 'all';
+type StatusFilter = RequestItem['status'] | 'all' | 'needs_info' | 'cancelled';
 const CATEGORY_META: Record<RequestItem['category'], {
     icon: LucideIcon;
     tone: string;
@@ -33,22 +38,24 @@ const CATEGORY_META: Record<RequestItem['category'], {
 };
 const CATEGORIES = Object.keys(CATEGORY_META) as RequestItem['category'][];
 const FORMAT_SHORT: Record<RequestItem['deliveryFormat'], string> = {
-    'Электронная с ЭЦП (PDF)': 'PDF с ЭЦП',
+    'Электронная с ЭЦП (PDF)': 'PDF · демо',
     'Бумажный оригинал в деканате': 'Бумажный оригинал',
 };
 const FORMAT_INLINE: Record<RequestItem['deliveryFormat'], string> = {
-    'Электронная с ЭЦП (PDF)': 'PDF с ЭЦП',
+    'Электронная с ЭЦП (PDF)': 'PDF · демо',
     'Бумажный оригинал в деканате': 'бумажный оригинал',
 };
 const FILTER_LABEL: Record<StatusFilter, string> = {
     all: 'Все',
+    needs_info: 'Нужно уточнение',
+    cancelled: 'Отменена',
     'Зарегистрирована в СЭД': 'В СЭД',
     'На проверке': 'На проверке',
     'На подписи': 'На подписи',
     Подписано: 'Подписано',
     'Готово к выдаче': 'Готово',
 };
-export default function RequestsView({ user, requests, onAddRequest, onUpdateRequest, initialRequestId, onConsumeInitialRequest }: RequestsViewProps) {
+export default function RequestsView({ user, requests, onAddRequest, details = {}, onAction, initialRequestId, onConsumeInitialRequest }: RequestsViewProps) {
     const uiT = useUI();
     const [selectedFilter, setSelectedFilter] = useState<StatusFilter>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -65,18 +72,18 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
     const filteredRequests = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
         return requests.filter((req) => {
-            const matchesFilter = selectedFilter === 'all' || req.status === selectedFilter;
+            const matchesFilter = selectedFilter === 'all' || (selectedFilter === 'cancelled' || selectedFilter === 'needs_info' ? details[req.id]?.lifecycle === selectedFilter : (details[req.id]?.lifecycle ?? 'active') === 'active' && req.status === selectedFilter);
             const haystack = `${req.title} ${req.id} ${req.category} ${req.comment ?? ''}`.toLowerCase();
             return matchesFilter && (!query || haystack.includes(query));
         });
-    }, [requests, selectedFilter, searchQuery]);
-    const inProgress = requests.filter((item) => item.stage !== 5).length;
+    }, [requests, details, selectedFilter, searchQuery]);
+    const inProgress = requests.filter((item) => isActiveRequest(item, details[item.id])).length;
     const done = requests.filter((item) => item.stage === 5).length;
-    const filterOptions = (['all', ...REQUEST_STAGES.map((stage) => stage.status)] as StatusFilter[])
+    const filterOptions = (['all', 'needs_info', 'cancelled', ...REQUEST_STAGES.map((stage) => stage.status)] as StatusFilter[])
         .map((value) => ({
         value,
         label: FILTER_LABEL[value],
-        count: value === 'all' ? requests.length : requests.filter((req) => req.status === value).length,
+        count: value === 'all' ? requests.length : requests.filter((req) => value === 'needs_info' || value === 'cancelled' ? details[req.id]?.lifecycle === value : (details[req.id]?.lifecycle ?? 'active') === 'active' && req.status === value).length,
     }))
         .filter((option) => option.value === 'all' || option.count > 0 || option.value === selectedFilter);
     async function submitRequest(event: FormEvent<HTMLFormElement>) {
@@ -164,7 +171,7 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
                         </span>)))}
                     </div>
                     <div className="mt-2.5 flex items-center justify-between gap-2">
-                      <Badge className={REQUEST_STATUS_TONE[req.status]}>{uiT(req.status)}</Badge>
+                      <Badge className={details[req.id]?.lifecycle === 'cancelled' ? 'bg-slate-100 text-slate-600' : details[req.id]?.lifecycle === 'needs_info' ? 'bg-amber-50 text-amber-800' : REQUEST_STATUS_TONE[req.status]}>{uiT(requestLabel(req, details[req.id]))}</Badge>
                       <span className="tabular text-xs text-slate-400">{uiT(req.createdAt)}</span>
                     </div>
                   </button>
@@ -179,7 +186,7 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
                 }} className="pressable rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">{uiT("Сбросить фильтры")}</button>)}/>))}
       </div>
 
-      <BottomSheet isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title={uiT("Новая заявка")} subtitle={uiT("ФИО, группа и паспортные данные подставятся из профиля")}>
+      <BottomSheet isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title={uiT("Новая заявка")} subtitle={uiT("ФИО и группа подставятся из профиля. Паспорт не нужен.")}>
         <form onSubmit={submitRequest} className="space-y-5">
           <div>
             <label htmlFor="request-title" className="mb-1.5 block text-[13px] font-medium text-slate-700">{uiT("Какой документ нужен")}</label>
@@ -205,7 +212,7 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
           <div>
             <p className="mb-1.5 text-[13px] font-medium text-slate-700">{uiT("Как получить")}</p>
             <Segmented id="delivery" value={deliveryFormat} onChange={setDeliveryFormat} options={[
-            { value: 'Электронная с ЭЦП (PDF)', label: 'PDF с ЭЦП' },
+            { value: 'Электронная с ЭЦП (PDF)', label: 'PDF · демо' },
             { value: 'Бумажный оригинал в деканате', label: 'Бумажный' },
         ]}/>
           </div>
@@ -218,7 +225,7 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
         </form>
       </BottomSheet>
 
-      <BottomSheet isOpen={detailOpen && selectedRequest !== null} onClose={() => { setDetailOpen(false); onConsumeInitialRequest?.(); }} title={uiT(selectedRequest?.title)} subtitle={uiT(selectedRequest && <Badge className={REQUEST_STATUS_TONE[selectedRequest.status]}>{uiT(selectedRequest.status)}</Badge>)}>
+      <BottomSheet isOpen={detailOpen && selectedRequest !== null} onClose={() => { setDetailOpen(false); onConsumeInitialRequest?.(); }} title={uiT(selectedRequest?.title)} subtitle={uiT(selectedRequest && <Badge className={details[selectedRequest.id]?.lifecycle === 'cancelled' ? 'bg-slate-100 text-slate-600' : details[selectedRequest.id]?.lifecycle === 'needs_info' ? 'bg-amber-50 text-amber-800' : REQUEST_STATUS_TONE[selectedRequest.status]}>{uiT(requestLabel(selectedRequest, details[selectedRequest.id]))}</Badge>)}>
         {uiT(selectedRequest && (<div className="space-y-5">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-slate-50 p-4 text-sm ring-1 ring-inset ring-slate-100">
               <div>
@@ -244,20 +251,21 @@ export default function RequestsView({ user, requests, onAddRequest, onUpdateReq
                 <p className="mt-0.5 text-sm text-slate-700">{uiT(selectedRequest.comment)}</p>
               </div>))}
 
+            {onAction && <RequestConversation key={selectedRequest.id} request={selectedRequest} details={requestDetails(selectedRequest, details[selectedRequest.id])} onAction={onAction}/>}
             <section>
               <h3 className="mb-3 text-[15px] font-semibold tracking-tight text-slate-900">{uiT("Ход заявки")}</h3>
-              <LiveRequestTracker request={selectedRequest} onStageChange={(updated) => onUpdateRequest?.(updated)}/>
+              <LiveRequestTracker request={selectedRequest}/>
             </section>
 
             <div className="grid grid-cols-[1fr_auto] gap-2 border-t border-slate-100 pt-4">
               <button type="button" onClick={() => {
                 setCertificateRequest(selectedRequest);
                 setDetailOpen(false);
-            }} disabled={selectedRequest.stage < 5} className="pressable flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400">
+            }} disabled={selectedRequest.stage < 5 || details[selectedRequest.id]?.lifecycle === 'cancelled'} className="pressable flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400">
                 <Eye className="h-4 w-4"/>
                 {uiT(selectedRequest.stage < 5 ? 'Документ ещё готовится' : 'Открыть документ')}
               </button>
-              <button type="button" disabled={selectedRequest.stage < 5} aria-label={uiT("Скачать")} onClick={() => {
+              <button type="button" disabled={selectedRequest.stage < 5 || details[selectedRequest.id]?.lifecycle === 'cancelled'} aria-label={uiT("Скачать")} onClick={() => {
                 setCertificateRequest(selectedRequest);
                 setDetailOpen(false);
             }} className="pressable flex items-center justify-center rounded-xl bg-slate-100 px-3.5 py-2.5 text-slate-700 hover:bg-slate-200 disabled:text-slate-300">

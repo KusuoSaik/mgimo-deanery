@@ -47,7 +47,7 @@ export async function logout(): Promise<void> {
 }
 export async function performStudentAction(action: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<{ account: StoredAccount; createdRequest?: RequestItem }> {
   const result = await api<ApiResult>('/api/student', {
-    method: 'POST', signal, body: JSON.stringify({ action, ...payload }),
+    method: action === 'refresh' ? 'GET' : 'POST', signal, ...(action === 'refresh' ? {} : { body: JSON.stringify({ action, ...payload }) }),
   });
   if (!result.account) throw new Error(result.error || 'Не удалось обновить данные');
   return { account: result.account, createdRequest: result.createdRequest };

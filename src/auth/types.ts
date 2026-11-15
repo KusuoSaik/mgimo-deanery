@@ -1,3 +1,4 @@
+import type { Consultation, ConsultationSlot, RequestDetails, AcademicResult } from '../portalDomain.js';
 import type { GradeItem, NotificationItem, RequestItem, ScheduleItem, ChatMessage } from '../types.js';
 
 export type UserRole = 'Студент' | 'Староста' | 'Иностранный студент';
@@ -18,6 +19,12 @@ export interface RegisterData {
 }
 
 export interface StoredAccount {
+  accessRole?: 'student' | 'staff';
+  direction?: string;
+  consultationsData?: Consultation[];
+  consultationSlotsData?: Record<string, ConsultationSlot[]>;
+  requestDetailsData?: Record<string, RequestDetails>;
+  academicResultsData?: AcademicResult[];
   chatGeneration?: number;
   id: string;
   email: string;

@@ -7,8 +7,8 @@ import { motion } from './motion';
 import { AnimatePresence, MotionConfig } from 'framer-motion';
 import { Avatar } from './components/ui/primitives';
 import { firstName } from './components/ui/tokens';
-import { AdminDashboard } from './components/AdminDashboard';
-import { AdminModeToggle } from './components/AdminModeToggle';
+import StaffPortal from './components/StaffPortal';
+import PrioritiesCard from './components/PrioritiesCard';
 import AiAssistantView from './components/AiAssistantView';
 import DashboardView from './components/DashboardView';
 import GradesView from './components/GradesView';
@@ -62,7 +62,7 @@ export default function App() {
     const work = useRef(new SessionWork());
     const [sessionError, setSessionError] = useState('');
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-    const [isAdminMode, setIsAdminMode] = useState(false);
+    const [selectedGradeId, setSelectedGradeId] = useState<string | null>(null);
     const [actionError, setActionError] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isLoadingSession, setIsLoadingSession] = useState(true);
@@ -96,7 +96,6 @@ export default function App() {
     }, []);
 
     function setActiveTab(tab: TabType) {
-        setIsAdminMode(false);
         const from = TABS.findIndex((item) => item.id === activeTabRef.current);
         const to = TABS.findIndex((item) => item.id === tab);
         if (from === to) return;
@@ -145,27 +144,16 @@ export default function App() {
         setChatHistory(initial);
         background('clear_chat');
     }
-    function handleDemoCompleteRequest() {
-        const target = requests.find(item => item.stage < 5);
-        if (target)
-            background('advance_demo_request', { id: target.id, expectedStage: target.stage });
-    }
     async function handleAddRequest(req: Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>): Promise<RequestItem> {
         const result = await applyServerAction('create_request', req);
         if (!result.createdRequest)
             throw new Error('Сервер не вернул созданную заявку.');
         return result.createdRequest;
     }
-    function handleUpdateRequest(updatedRequest: RequestItem) {
-        const existing = requests.find(item => item.id === updatedRequest.id);
-        if (existing)
-            background('advance_demo_request', { id: existing.id, expectedStage: existing.stage });
-    }
     function handleLogout() {
         work.current.cancel();
         void logout().then(() => {
             setIsLoggedIn(false);
-            setIsAdminMode(false);
             setCurrentAccount(null);
             setActionError('');
             setRequests([]);
@@ -175,6 +163,7 @@ export default function App() {
             setChatHistory([]);
             chatRef.current = [];
             setSelectedRequestId(null);
+            setSelectedGradeId(null);
             setActiveTab('dashboard');
         }).catch(error => {
             setActionError(error instanceof Error ? error.message : 'Не удалось выйти');
@@ -203,6 +192,13 @@ export default function App() {
         return <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-sm text-slate-300"><span className="flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-amber-400"/>{uiT("Проверяем защищённую сессию")}</span></div>;
     }
 
+    if (isLoggedIn && currentAccount?.accessRole === 'staff') return <div className="mx-auto min-h-dvh max-w-md bg-slate-50">{actionError && <p role="alert" className="bg-rose-50 p-4 text-rose-800">{actionError}</p>}<StaffPortal name={currentAccount.profile.name} onLogout={handleLogout}/></div>;
+
+    function openRequest(id: string) { setSelectedRequestId(id); setActiveTab('requests'); }
+    function openGrade(id: string) { setSelectedGradeId(id); setActiveTab('grades'); }
+    const details = currentAccount?.requestDetailsData ?? {};
+    const consultations = currentAccount?.consultationsData ?? [];
+
     return <MotionConfig reducedMotion={still ? "always" : "user"}><div className="min-h-dvh bg-slate-200"><div className="relative mx-auto min-h-dvh max-w-md overflow-x-clip bg-slate-50 shadow-2xl shadow-slate-900/20"><AnimatePresence mode="wait" initial={false}>{uiT(isLoggedIn && currentAccount && userProfile ? <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }}>
     <div className="sticky top-0 z-30 border-b border-white/10 bg-slate-900 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] text-white">
       <div className="flex items-center justify-between gap-2">
@@ -213,7 +209,7 @@ export default function App() {
             <span className="block truncate text-[11px] leading-tight text-slate-400">{uiT("Группа ")}{uiT(userProfile.group)}</span>
           </span>
         </button>
-        <AdminModeToggle isAdminMode={isAdminMode} onToggle={setIsAdminMode}/>
+        <button type="button" className="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs" onClick={() => background('refresh')}>{uiT("Обновить данные")}</button>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setEnglish(!english)} aria-label={english ? 'Русский' : 'English'} className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500">
@@ -242,14 +238,14 @@ export default function App() {
       </div>
     </div>
     {uiT(actionError && <p role="alert" className="bg-rose-50 p-4 text-rose-800">{uiT(actionError)}<button onClick={() => setActionError('')} className="ml-3 underline">{uiT("OK")}</button></p>)}
-    <AnimatePresence mode="wait" initial={false} custom={direction}><motion.div key={isAdminMode ? 'admin' : activeTab} custom={direction} variants={pageVariants} initial="enter" animate="center" exit="exit" transition={{ x: { type: 'spring', stiffness: 420, damping: 40 }, opacity: { duration: 0.18 } }}>
-      {uiT(isAdminMode ? <AdminDashboard requests={requests} students={[userProfile]} onApproveRequest={(id) => { const req = requests.find(r => r.id === id); if (req) background('advance_demo_request', { id: req.id, expectedStage: req.stage }); }} onRejectRequest={(id, comment) => background('update_request', { id, patch: { comment } })} onSendNotification={(_studentId, message) => setNotifications(prev => [{ id: 'nt-' + Date.now(), title: 'Сообщение из деканата', message, date: 'Сегодня', type: 'warning', isRead: false }, ...prev])} /> : activeTab === 'dashboard' && <DashboardView user={userProfile} schedule={schedule} notifications={notifications} requests={requests} onNavigate={setActiveTab} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onDemoCompleteRequest={handleDemoCompleteRequest}/>)}
-      {uiT(!isAdminMode && activeTab === 'schedule' && <ScheduleView schedule={schedule}/>)}
-      {uiT(!isAdminMode && activeTab === 'grades' && <GradesView user={userProfile} grades={grades}/>)}
-      {uiT(!isAdminMode && activeTab === 'requests' && <RequestsView key={selectedRequestId ?? 'requests-list'} initialRequestId={selectedRequestId} onConsumeInitialRequest={() => setSelectedRequestId(null)} user={userProfile} requests={requests} onAddRequest={handleAddRequest} onUpdateRequest={handleUpdateRequest}/>)}
-      {uiT(!isAdminMode && activeTab === 'profile' && <ProfileView user={userProfile} onLogout={handleLogout} onResetDemoData={handleResetDemoData}/>)}
+    <AnimatePresence mode="wait" initial={false} custom={direction}><motion.div key={activeTab} custom={direction} variants={pageVariants} initial="enter" animate="center" exit="exit" transition={{ x: { type: 'spring', stiffness: 420, damping: 40 }, opacity: { duration: 0.18 } }}>
+      {uiT(activeTab === 'dashboard' && <DashboardView user={userProfile} schedule={schedule} notifications={notifications} requests={requests.filter(r => details[r.id]?.lifecycle !== 'cancelled')} onNavigate={setActiveTab} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onOpenRequest={openRequest} priorities={<PrioritiesCard grades={grades} requests={requests} details={details} schedule={schedule} consultations={consultations} onOpenGrade={openGrade} onOpenRequest={openRequest} onNavigate={setActiveTab}/>}/>)}
+      {uiT(activeTab === 'schedule' && <ScheduleView schedule={schedule}/>)}
+      {uiT(activeTab === 'grades' && <GradesView user={userProfile} grades={grades} results={currentAccount.academicResultsData ?? []} initialGradeId={selectedGradeId} onConsumeGrade={() => setSelectedGradeId(null)} consultations={consultations} slots={currentAccount.consultationSlotsData ?? {}} onAction={applyServerAction}/>)}
+      {uiT(activeTab === 'requests' && <RequestsView key={selectedRequestId ?? 'requests-list'} initialRequestId={selectedRequestId} onConsumeInitialRequest={() => setSelectedRequestId(null)} user={userProfile} requests={requests} onAddRequest={handleAddRequest} details={details} onAction={applyServerAction}/>)}
+      {uiT(activeTab === 'profile' && <ProfileView direction={currentAccount.direction ?? ""} user={userProfile} onLogout={handleLogout} onResetDemoData={handleResetDemoData}/>)}
     </motion.div></AnimatePresence>
-    <div hidden={isAdminMode || activeTab !== 'ai'}><AiAssistantView key={`${currentAccount.id}-${currentAccount.chatGeneration ?? 0}`} ownerId={currentAccount.id} language={english ? 'en' : 'ru'} user={userProfile} messages={chatHistory} onMessagesChange={handleMessagesChange} onAddRequest={handleAddRequest} onClearChat={handleClearChat}/></div>
+    <div hidden={activeTab !== 'ai'}><AiAssistantView key={`${currentAccount.id}-${currentAccount.chatGeneration ?? 0}`} onNavigate={setActiveTab} ownerId={currentAccount.id} language={english ? 'en' : 'ru'} user={userProfile} messages={chatHistory} onMessagesChange={handleMessagesChange} onAddRequest={handleAddRequest} onClearChat={handleClearChat}/></div>
     <AnimatePresence><BottomNav english={english} key="nav" activeTab={activeTab} onChange={setActiveTab} badges={{ dashboard: unreadCount }}/></AnimatePresence>
   </motion.div> : <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.35 }}><LoginScreen onLoginSuccess={(account) => { work.current.begin(account.id); chatRef.current = account.chatHistoryData; chatGeneration.current = account.chatGeneration ?? 0; applyAccount(account); setIsLoggedIn(true); setActiveTab('dashboard'); }}/></motion.div>)}</AnimatePresence></div></div></MotionConfig>;
 }

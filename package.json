@@ -10,12 +10,13 @@
     "typecheck:api": "tsc -p tsconfig.api.json",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --import tsx tests/state-isolation.mts && node --import tsx tests/session-work.mts && node --import tsx tests/ai-limiter.mts && node --import tsx tests/ai-api.mts",
+    "test": "node --import tsx tests/state-isolation.mts && node --import tsx tests/session-work.mts && node --import tsx tests/ai-limiter.mts && node --import tsx tests/ai-api.mts && node --import tsx tests/portal-domain.mts",
     "test:browser": "node tests/browser-smoke.mjs",
     "test:ai:shared": "node --import tsx tests/ai-multiprocess.mts"
   },
   "dependencies": {
     "@fontsource-variable/onest": "^5.3.1",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@tailwindcss/vite": "^4.3.5",
     "@types/pg": "^8.23.1",
     "cors": "^2.8.5",
@@ -23,6 +24,7 @@
     "express": "^4.19.2",
     "framer-motion": "^14.13.0",
     "lucide-react": "^1.71.0",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

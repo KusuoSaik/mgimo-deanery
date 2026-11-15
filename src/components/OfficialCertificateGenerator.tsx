@@ -1,179 +1,32 @@
-import { useModalFocus } from '../useModalFocus';
-import { useUI } from '../i18n';
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from '../motion';
-import { Download, Printer, X } from 'lucide-react';
+import { Download, X } from 'lucide-react';
+import { useModalFocus } from '../useModalFocus';
+import { usePreferences } from '../preferences';
+import { certificateDate, certificateLines } from '../certificateContent';
 import type { RequestItem, UserProfile } from '../types';
-import { Segmented } from './ui/primitives';
-type CertificateLanguage = 'ru' | 'en';
-interface OfficialCertificateGeneratorProps {
-    user: UserProfile;
-    request: RequestItem;
-    onClose: () => void;
+export function OfficialCertificateGenerator({ user, request, onClose }: { user: UserProfile; request: RequestItem; onClose: () => void }) {
+  const { english: en } = usePreferences();
+  const [english, setEnglish] = useState(en), [pending, setPending] = useState(false), [error, setError] = useState('');
+  const ref = useRef<HTMLDivElement>(null), lock = useRef(false); useModalFocus(true, ref, onClose);
+  const t = (ru: string, eng: string) => english ? eng : ru;
+  async function download() {
+    if (lock.current) return; lock.current = true; setPending(true); setError('');
+    try {
+      const response = await fetch('/fonts/NotoSans-Regular.ttf');
+      if (!response.ok) throw new Error(t('Не удалось загрузить шрифт. Попробуйте ещё раз.', 'Could not load the font. Please retry.'));
+      const { createCertificatePdf } = await import('../certificatePdf');
+      const bytes = await createCertificatePdf(new Uint8Array(await response.arrayBuffer()), user, request, english);
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+      const a = document.createElement('a'); a.href = url; a.download = `Demo_${request.id}_${english ? 'en' : 'ru'}.pdf`; a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) { setError(e instanceof Error ? e.message : t('Не удалось создать PDF', 'Could not generate PDF')); }
+    finally { lock.current = false; setPending(false); }
+  }
+  return createPortal(<div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('Демо-документ', 'Demo document')} className="fixed inset-0 z-[80] flex justify-center bg-slate-950/80 p-4 backdrop-blur-sm"><div className="flex h-full w-full max-w-md flex-col gap-3">
+    <header className="flex items-center gap-3 text-white"><button className="rounded-xl bg-white/10 p-3" onClick={onClose} aria-label={t('Закрыть', 'Close')}><X className="h-5 w-5"/></button><p className="flex-1 text-sm">{t('Демонстрационный документ', 'Demonstration document')}</p><button className="rounded-xl bg-white/10 p-3 text-sm" onClick={() => setEnglish(!english)}>{english ? 'RU' : 'EN'}</button></header>
+    <article className="flex-1 space-y-4 overflow-y-auto rounded-2xl bg-white p-5 text-slate-900"><p className="rounded-xl bg-amber-100 p-3 text-xs font-semibold text-amber-950">{t('ДЕМО · Не является официальным документом МГИМО', 'DEMO · Not an official MGIMO document')}</p><h1 className="text-xl font-semibold">{t('Демонстрационный документ', 'Demonstration document')}</h1><p className="break-all text-xs text-slate-500">{request.id} · {certificateDate(request).toLocaleDateString(english ? 'en-GB' : 'ru-RU')}</p>{certificateLines(user, request, english).map(line => <p key={line} className="break-words text-sm leading-relaxed">{line}</p>)}<p className="text-xs font-semibold">{t('Подпись: демонстрационная имитация', 'Signature: demonstration only')}</p></article>
+    {error && <p role="alert" className="rounded-xl bg-rose-100 p-3 text-sm text-rose-900">{error}</p>}
+    <button className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 p-3 text-sm font-medium text-white disabled:opacity-50" disabled={pending} onClick={() => void download()}><Download className="h-4 w-4"/>{pending ? t('Создаём PDF…', 'Creating PDF…') : t('Скачать PDF', 'Download PDF')}</button>
+  </div></div>, document.body);
 }
-const TEMPLATES = {
-    ru: {
-        org: 'Федеральное государственное автономное образовательное учреждение высшего образования',
-        header: 'Московский государственный институт международных отношений (университет) Министерства иностранных дел Российской Федерации',
-        title: 'Справка',
-        docNumber: 'Исх. №',
-        body: (p: Record<string, string>) => [
-            `Дана ${p.name}, студенту ${p.course} курса (${p.faculty}, группа ${p.group}), в том, что он(а) действительно обучается в МГИМО МИД России по очной форме обучения.`,
-            `Приказ о зачислении № 001 от ${p.enrolled}`,
-            `Справка выдана для предъявления по месту требования и действительна 90 дней с момента выдачи.`,
-        ],
-        signer: 'Проректор по учебной работе',
-        stampTop: 'МГИМО МИД РОССИИ',
-        stampBottom: 'ЭЛЕКТРОННАЯ ПОДПИСЬ',
-        stampCenter: 'Подписано',
-        verify: 'Демо-код (внешняя проверка не подключена):',
-    },
-    en: {
-        org: 'Federal State Autonomous Educational Institution of Higher Education',
-        header: 'Moscow State Institute of International Relations (University) of the Ministry of Foreign Affairs of the Russian Federation',
-        title: 'Certificate',
-        docNumber: 'Ref. No.',
-        body: (p: Record<string, string>) => [
-            `This is to certify that ${p.name}, a year ${p.course} student (${p.faculty}, group ${p.group}), is enrolled at MGIMO University in a full-time programme.`,
-            `Enrollment order No. 001 dated ${p.enrolled}.`,
-            `This certificate is issued for presentation upon request and is valid for 90 days from the date of issue.`,
-        ],
-        signer: 'Vice-Rector for Academic Affairs',
-        stampTop: 'MGIMO UNIVERSITY',
-        stampBottom: 'ELECTRONIC SIGNATURE',
-        stampCenter: 'Signed',
-        verify: 'Demo code (no external verification):',
-    },
-};
-const formatDate = (date: Date, locale: CertificateLanguage) => date.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
-function Stamp({ top, bottom, center, date }: {
-    top: string;
-    bottom: string;
-    center: string;
-    date: string;
-}) {
-    const uiT = useUI();
-    return (<svg viewBox="0 0 140 140" className="h-32 w-32 text-blue-700" aria-hidden="true">
-      <defs>
-        <path id="stamp-top" d="M 70 70 m -52 0 a 52 52 0 1 1 104 0"/>
-        <path id="stamp-bottom" d="M 70 70 m -52 0 a 52 52 0 0 0 104 0"/>
-      </defs>
-      <g fill="none" stroke="currentColor" opacity="0.85">
-        <circle cx="70" cy="70" r="66" strokeWidth="2.5"/>
-        <circle cx="70" cy="70" r="60" strokeWidth="0.8"/>
-        <circle cx="70" cy="70" r="38" strokeWidth="1.4"/>
-      </g>
-      <g fill="currentColor" opacity="0.85" fontFamily="ui-sans-serif, system-ui" fontWeight="700">
-        <text fontSize="10" letterSpacing="2.2">
-          <textPath href="#stamp-top" startOffset="50%" textAnchor="middle">
-            {uiT(top)}
-          </textPath>
-        </text>
-        <text fontSize="8.5" letterSpacing="1.6">
-          <textPath href="#stamp-bottom" startOffset="50%" textAnchor="middle" dominantBaseline="hanging">
-            {uiT(bottom)}
-          </textPath>
-        </text>
-        <text x="70" y="68" textAnchor="middle" fontSize="11">
-          {uiT(center)}
-        </text>
-        <text x="70" y="82" textAnchor="middle" fontSize="7.5" fontWeight="500">
-          {uiT(date)}
-        </text>
-      </g>
-    </svg>);
-}
-export const OfficialCertificateGenerator = ({ user, request, onClose }: OfficialCertificateGeneratorProps) => {
-    const uiT = useUI();
-    const [language, setLanguage] = useState<CertificateLanguage>('ru');
-    const t = TEMPLATES[language];
-    const now = new Date();
-    const docNumber = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${request.id.slice(-4).toUpperCase()}`;
-    const code = request.verificationQrCode || `MGIMO-${request.id.toUpperCase()}`;
-    const paragraphs = t.body({
-        name: user.name,
-        course: String(user.course),
-        faculty: user.faculty,
-        group: user.group,
-        enrolled: formatDate(new Date(now.getMonth() >= 8 ? now.getFullYear() - (user.course - 1) : now.getFullYear() - user.course, 8, 1), language),
-    });
-    const dialogRef = useRef<HTMLDivElement>(null);
-    useModalFocus(true, dialogRef, onClose);
-    const handleDownload = () => {
-        const element = document.getElementById('certificate-content');
-        if (!element)
-            return;
-        const html = `<!doctype html><meta charset="utf-8"><title>${t.title}</title><body style="font-family:Georgia,serif;max-width:720px;margin:40px auto">${element.innerHTML}</body>`;
-        const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `Certificate_${user.studentId}_${language}.html`;
-        link.click();
-        URL.revokeObjectURL(url);
-    };
-    return createPortal(<motion.div ref={dialogRef} tabIndex={-1} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[80] flex justify-center bg-slate-950/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={uiT("Демо-документ")}>
-      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }} className="flex h-full w-full max-w-md flex-col">
-        <div className="flex items-center gap-3 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
-          <button type="button" onClick={onClose} aria-label={uiT("Закрыть")} className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
-            <X className="h-4 w-4"/>
-          </button>
-          <p className="flex-1 text-sm font-medium text-white">{uiT("Документ")}</p>
-          <Segmented id="cert-lang" tone="dark" size="sm" className="w-36" value={language} onChange={setLanguage} options={[
-            { value: 'ru', label: 'RU' },
-            { value: 'en', label: 'EN' },
-        ]}/>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          <motion.article key={language} id="certificate-content" initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} className="relative rounded-md bg-[#fdfdfb] px-6 py-8 font-serif text-slate-900 shadow-2xl">
-            <header className="border-b border-slate-300 pb-4 text-center">
-              <p className="text-[10px] leading-snug text-slate-500">{uiT(t.org)}</p>
-              <h1 className="mt-2 text-[13px] font-bold leading-snug text-blue-950">{uiT(t.header)}</h1>
-              <div className="mt-4 flex justify-between font-sans text-[10px] text-slate-500">
-                <span className="tabular">
-                  {uiT(t.docNumber)} {uiT(docNumber)}
-                </span>
-                <span>{uiT(formatDate(now, language))}</span>
-              </div>
-            </header>
-
-            <h2 className="mt-8 text-center text-2xl font-bold tracking-[0.2em] text-blue-950">{uiT(t.title.toUpperCase())}</h2>
-
-            <div className="mt-6 space-y-3 text-[13px] leading-[1.75] text-slate-800 [hyphens:auto] [text-align:justify]" lang={language}>
-              {uiT(paragraphs.map((text) => (<p key={text} className="indent-6">
-                  {uiT(text)}
-                </p>)))}
-            </div>
-
-            <div className="relative mt-12 flex items-end justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[12px] leading-snug text-slate-700">{uiT(t.signer)}</p>
-                <svg viewBox="0 0 120 30" className="mt-2 h-7 w-28 text-blue-900" aria-hidden="true">
-                  <path d="M2 22c10-14 14-16 16-10s-6 10 0 8 10-18 16-14-4 16 4 12 8-12 14-10 2 10 10 6 16-10 20-6 10 4 34-6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-                <div className="mt-1 w-32 border-t border-slate-400"/>
-              </div>
-              <motion.div initial={{ scale: 1.8, rotate: -28, opacity: 0 }} animate={{ scale: 1, rotate: -12, opacity: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 18, delay: 0.35 }} className="-mb-6 -mr-2 shrink-0 mix-blend-multiply">
-                <Stamp top={t.stampTop} bottom={t.stampBottom} center={t.stampCenter} date={now.toLocaleDateString(uiT.locale)}/>
-              </motion.div>
-            </div>
-
-            <footer className="mt-10 border-t border-slate-200 pt-3 text-center font-sans text-[10px] leading-relaxed text-slate-500">
-              <div>
-                {uiT(t.verify)} <span className="tabular font-semibold text-slate-700">{uiT(code)}</span>
-              </div>
-              <div className="mt-1 text-[9px] text-slate-400">{uiT("Демонстрационный макет документа для конкурсного прототипа (не является официальным документом МГИМО)")}</div>
-            </footer>
-          </motion.article>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 border-t border-white/10 bg-slate-950/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-          <button type="button" onClick={() => window.print()} className="pressable flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/15">
-            <Printer className="h-4 w-4"/>{uiT("Печать")}</button>
-          <button type="button" onClick={handleDownload} className="pressable flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-500">
-            <Download className="h-4 w-4"/>{uiT("Скачать")}</button>
-        </div>
-      </motion.div>
-    </motion.div>, document.body);
-};

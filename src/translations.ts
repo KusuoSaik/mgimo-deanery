@@ -1,4 +1,12 @@
 export const translations: Record<string, string> = {
+  "Обновить данные": "Refresh data",
+  "Сотрудник деканата": "Deanery staff",
+  "Направление подготовки": "Degree programme",
+  "Зачтено": "Passed", "Не зачтено": "Not passed",
+  "Нужно уточнение": "Clarification required", "Отменена": "Cancelled",
+  "PDF · демо": "PDF · demo",
+  "ФИО и группа подставятся из профиля. Паспорт не нужен.": "Name and group are filled from your profile. No passport is needed.",
+  "Демонстрационный код": "Demonstration code",
   "Проверьте AI_PROVIDER, AI_BASE_URL и AI_MODEL на сервере.": "Check AI_PROVIDER, AI_BASE_URL and AI_MODEL on the server.",
   "Главная": "Home",
   "Расписание": "Schedule",

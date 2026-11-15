@@ -262,6 +262,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       return;
     }
     const payload = body as Partial<ChatRequest>;
+    if (account.accessRole === 'staff') { res.status(403).json({ response: 'Этот помощник доступен в кабинете студента.' }); return; }
     if (payload.ownerId !== account.id) { res.status(409).json({ response: 'Аккаунт изменился. Обновите страницу.' }); return; }
     const rawMessages = payload.messages;
     if (!Array.isArray(rawMessages)) {
