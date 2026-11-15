@@ -1,3 +1,4 @@
+import { usePreferences } from '../preferences';
 import { useUI } from '../i18n';
 import React, { useEffect, useState } from 'react';
 import { motion } from '../motion';
@@ -25,6 +26,7 @@ function TimerRing({ value }: {
 }
 export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onResetDemoData }) => {
     const uiT = useUI();
+    const { large, setLarge, contrast, setContrast, still, setStill } = usePreferences();
     const [privacyMode, setPrivacyMode] = useState(true);
     const [qrCounter, setQrCounter] = useState(QR_PERIOD);
     const [qrToken, setQrToken] = useState('MGIMO-PASS-8841');
@@ -168,6 +170,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, onLogout, onRese
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"/>
               <span className="relative h-2 w-2 rounded-full bg-emerald-500"/>
             </span>
+          </div>
+        </section>
+
+        <section className="card overflow-hidden p-4">
+          <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">{uiT("Доступность")}</h3>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {([
+              [large, setLarge, "Крупный текст"],
+              [contrast, setContrast, "Высокий контраст"],
+              [still, setStill, "Без анимации"],
+            ] as const).map(([active, toggle, label]) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggle(!active)}
+                className={`pressable rounded-xl px-2.5 py-2 text-center text-xs font-medium transition-colors ${
+                  active ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {uiT(label)}
+              </button>
+            ))}
           </div>
         </section>
 

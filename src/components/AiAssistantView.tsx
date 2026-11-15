@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { motion } from '../motion';
 import { AnimatePresence } from 'framer-motion';
-import { ArrowUp, CircleCheck, KeyRound, ServerCog, ShieldCheck, Sparkles, UserX } from 'lucide-react';
+import { ArrowUp, CircleCheck, KeyRound, RotateCcw, ServerCog, ShieldCheck, Sparkles, UserX } from 'lucide-react';
 import type { ChatMessage, RequestItem, UserProfile, SuggestedAction } from '../types';
 import { ActionableAICard } from './ActionableAICard';
 import { BottomSheet } from './BottomSheet';
+
 type RequestFormData = Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>;
 type AiAssistantViewProps = {
     ownerId: string;
@@ -15,12 +16,15 @@ type AiAssistantViewProps = {
     messages: ChatMessage[];
     onMessagesChange: Dispatch<SetStateAction<ChatMessage[]>>;
     onAddRequest: (request: RequestFormData) => Promise<RequestItem>;
+    onClearChat?: () => void;
 };
+
 const ROLE_SUGGESTIONS: Record<string, string[]> = {
     Студент: ['Какие у меня оценки по БРС?', 'Когда следующая пара?', 'Оформи справку об обучении'],
     Староста: ['Какие у меня баллы БРС?', 'Когда следующая пара и есть ли переносы?', 'Оформи справку об успеваемости'],
     'Иностранный студент': ['Оформи справку для продления визы', 'Какие у меня оценки?', 'Когда следующая пара?'],
 };
+
 let messageSeq = 0;
 function makeId(): string {
     messageSeq += 1;
@@ -30,18 +34,21 @@ function nowTime(): string {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
+
 function TypingDots() {
     const uiT = useUI();
     return (<span className="flex items-center gap-1 py-1" aria-label={uiT("Ассистент печатает")}>
       {uiT([0, 1, 2].map((dot) => (<motion.span key={dot} className="h-1.5 w-1.5 rounded-full bg-slate-400" animate={{ y: [0, -4, 0], opacity: [0.5, 1, 0.5] }} transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.15, ease: 'easeInOut' }}/>)))}
     </span>);
 }
+
 function AiMark() {
     return (<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-amber-300 ring-2 ring-white">
       <Sparkles className="h-3.5 w-3.5"/>
     </span>);
 }
-export default function AiAssistantView({ user, ownerId, language, messages, onMessagesChange, onAddRequest, }: AiAssistantViewProps) {
+
+export default function AiAssistantView({ user, ownerId, language, messages, onMessagesChange, onAddRequest, onClearChat }: AiAssistantViewProps) {
     const uiT = useUI();
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -50,26 +57,48 @@ export default function AiAssistantView({ user, ownerId, language, messages, onM
     const pendingRef = useRef(false);
     const requestRef = useRef<AbortController | null>(null);
     const aliveRef = useRef(true);
-    useEffect(() => { aliveRef.current = true; return () => { aliveRef.current = false; requestRef.current?.abort(); }; }, []);
+
+    useEffect(() => {
+        aliveRef.current = true;
+        return () => {
+            aliveRef.current = false;
+            requestRef.current?.abort();
+        };
+    }, []);
+
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const hasUserMessages = messages.some((m) => m.sender === 'user');
     const suggestions = ROLE_SUGGESTIONS[user.role ?? 'Студент'] ?? ROLE_SUGGESTIONS['Студент'];
+
     useEffect(() => {
         const node = scrollRef.current;
-        if (node)
-            node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+        if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
     }, [messages, isLoading]);
+
     useEffect(() => {
         const node = inputRef.current;
-        if (!node)
-            return;
+        if (!node) return;
         node.style.height = 'auto';
         node.style.height = `${Math.min(node.scrollHeight, 120)}px`;
     }, [inputValue]);
+
+    function handleClear() {
+        requestRef.current?.abort();
+        requestRef.current = null;
+        pendingRef.current = false;
+        setIsLoading(false);
+        setInputValue('');
+        if (onClearChat) {
+            onClearChat();
+        } else {
+            const firstAi = messages.find((m) => m.sender === 'ai');
+            onMessagesChange(firstAi ? [firstAi] : []);
+        }
+    }
+
     async function send(text: string) {
         const trimmed = text.trim();
-        if (!trimmed || pendingRef.current)
-            return;
+        if (!trimmed || pendingRef.current) return;
         pendingRef.current = true;
         const userMessage: ChatMessage = { id: makeId(), sender: 'user', text: trimmed, timestamp: nowTime() };
         const history = [...messages, userMessage];
@@ -85,7 +114,9 @@ export default function AiAssistantView({ user, ownerId, language, messages, onM
                 signal: controller.signal,
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ownerId, language,
+                body: JSON.stringify({
+                    ownerId,
+                    language,
                     messages: history
                         .filter((_, idx) => idx > 0 || history[0]?.sender === 'user')
                         .map((m) => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
@@ -99,38 +130,35 @@ export default function AiAssistantView({ user, ownerId, language, messages, onM
                 throw new Error(data.response || (response.status === 429 ? 'Лимит запросов к ИИ исчерпан. Попробуйте через минуту.' : 'Сервер временно недоступен'));
             if (!data.response?.trim())
                 throw new Error('ИИ вернул пустой ответ. Попробуйте сократить вопрос.');
-            if (!aliveRef.current)
-                return;
+            if (!aliveRef.current) return;
             onMessagesChange((prev) => [
                 ...prev,
                 { id: makeId(), sender: 'ai', text: data.response!, timestamp: nowTime(), suggestedAction: data.suggestedAction },
             ]);
-        }
-        catch (error) {
-            if (!aliveRef.current)
-                return;
+        } catch (error) {
+            if (!aliveRef.current) return;
             onMessagesChange((prev) => [
                 ...prev,
                 {
                     id: makeId(),
                     sender: 'ai',
-                    text: error instanceof Error && !['AbortError','TypeError'].includes(error.name) ? error.message : 'ИИ-сервис не ответил вовремя.',
+                    text: error instanceof Error && !['AbortError', 'TypeError'].includes(error.name) ? error.message : 'ИИ-сервис не ответил вовремя.',
                     timestamp: nowTime(),
                 },
             ]);
-        }
-        finally {
+        } finally {
             clearTimeout(timer);
             requestRef.current = null;
             pendingRef.current = false;
-            if (aliveRef.current)
-                setIsLoading(false);
+            if (aliveRef.current) setIsLoading(false);
         }
     }
+
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         void send(inputValue);
     }
+
     async function handleRequestAction(action: SuggestedAction, messageId: string) {
         try {
             await onAddRequest({
@@ -140,25 +168,43 @@ export default function AiAssistantView({ user, ownerId, language, messages, onM
             });
             if (!aliveRef.current) return;
             onMessagesChange((prev) => prev.map((m) => (m.id === messageId ? { ...m, actionSent: true } : m)));
-        }
-        catch {
+        } catch {
             if (!aliveRef.current) return;
             onMessagesChange((prev) => [...prev, { id: makeId(), sender: 'ai', text: 'Не удалось создать заявку. Попробуйте ещё раз.', timestamp: nowTime() }]);
         }
     }
+
     return (<div className="flex h-[calc(100dvh-52px)] flex-col pb-24">
       <header className="relative shrink-0 overflow-hidden rounded-b-3xl bg-slate-900 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-4 pb-4 pt-3 text-white shadow-md">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/25">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/25">
             <Sparkles className="h-5 w-5"/>
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-[17px] font-semibold leading-tight tracking-tight">{uiT("ИИ-ассистент деканата")}</h1>
+            <h1 className="truncate text-[16px] font-semibold leading-tight tracking-tight">{uiT("ИИ-ассистент деканата")}</h1>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"/>{uiT("Учебный помощник · Демо-данные")}</p>
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"/>
+              <span className="truncate">{uiT("Учебный помощник · Демо-данные")}</span>
+            </p>
           </div>
-          <button type="button" onClick={() => setShowPdnInfo(true)} className="pressable flex items-center gap-1.5 rounded-xl bg-white/[0.08] px-2.5 py-1.5 text-xs font-medium text-slate-200 ring-1 ring-inset ring-white/10 hover:bg-white/[0.12]">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400"/>{uiT("Приватность")}</button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {uiT(messages.length > 1 && (
+              <button
+                type="button"
+                onClick={handleClear}
+                aria-label={uiT("Очистить диалог")}
+                title={uiT("Очистить диалог")}
+                className="pressable flex items-center gap-1 rounded-xl bg-white/[0.08] px-2.5 py-1.5 text-xs font-medium text-slate-200 ring-1 ring-inset ring-white/10 hover:bg-white/[0.14]"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-amber-300"/>
+                <span>{uiT("Очистить")}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => setShowPdnInfo(true)} className="pressable flex items-center gap-1 rounded-xl bg-white/[0.08] px-2.5 py-1.5 text-xs font-medium text-slate-200 ring-1 ring-inset ring-white/10 hover:bg-white/[0.14]">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400"/>
+              <span>{uiT("Приватность")}</span>
+            </button>
+          </div>
         </div>
       </header>
 

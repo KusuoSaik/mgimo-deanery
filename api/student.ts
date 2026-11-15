@@ -75,6 +75,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
         state.notifications = state.notifications.map(item => item.id === body.id ? { ...item, isRead: true } : item);
       } else if (action === 'mark_all_notifications_read') {
         state.notifications = state.notifications.map(item => ({ ...item, isRead: true }));
+      } else if (action === 'clear_chat') {
+        const initial = structuredClone(defaultState(account));
+        state.chatHistory = initial.chatHistory;
+        state.chatGeneration = (state.chatGeneration ?? 0) + 1;
       } else if (action === 'reset_demo') {
         const initial = structuredClone(defaultState(account));
         state.requests = initial.requests; state.notifications = initial.notifications; state.chatHistory = initial.chatHistory;

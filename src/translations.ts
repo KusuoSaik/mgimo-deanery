@@ -201,6 +201,8 @@ export const translations: Record<string, string> = {
   "ИИ-ассистент деканата": "Deanery AI assistant",
   "Учебный помощник · Демо-данные": "Study assistant · Fictional data",
   "Приватность": "Privacy",
+  "Очистить": "Clear",
+  "Очистить диалог": "Clear chat",
   "Ассистент печатает": "Assistant is replying",
   "Сообщение ассистенту": "Message the assistant",
   "Спросите что-нибудь": "Ask a question",
