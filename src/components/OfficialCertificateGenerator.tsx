@@ -96,7 +96,7 @@ export const OfficialCertificateGenerator = ({ user, request, onClose }: Officia
         course: String(user.course),
         faculty: user.faculty,
         group: user.group,
-        enrolled: formatDate(new Date(2022, 8, 1), language),
+        enrolled: formatDate(new Date(now.getMonth() >= 8 ? now.getFullYear() - (user.course - 1) : now.getFullYear() - user.course, 8, 1), language),
     });
     const dialogRef = useRef<HTMLDivElement>(null);
     useModalFocus(true, dialogRef, onClose);

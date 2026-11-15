@@ -1,7 +1,6 @@
 import { useUI } from './i18n';
 import { SessionWork, isCancelled } from './auth/sessionWork';
 import { usePreferences } from './preferences';
-import StudentHub from './components/StudentHub';
 import { useEffect, useRef, useState, type SetStateAction } from 'react';
 import { CalendarDays, ChartColumn, ClipboardList, House, Sparkles, UserRound } from 'lucide-react';
 import { motion } from './motion';
@@ -175,7 +174,6 @@ export default function App() {
                 setActionError(error instanceof Error ? error.message : 'Не удалось сохранить чат');
         });
     }
-    function openRequest(id: string) { setSelectedRequestId(id); setActiveTab('requests'); }
     const userProfile = currentAccount ? accountToUserProfile(currentAccount) : null;
     const unreadCount = notifications.filter((item) => !item.isRead).length;
     if (sessionError)
@@ -184,9 +182,8 @@ export default function App() {
         return <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-sm text-slate-300"><span className="flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-amber-400"/>{uiT("Проверяем защищённую сессию")}</span></div>;
     }
     return <MotionConfig reducedMotion={still ? "always" : "user"}><div className="min-h-dvh bg-slate-200"><div className="relative mx-auto min-h-dvh max-w-md overflow-x-clip bg-slate-50 shadow-2xl shadow-slate-900/20"><AnimatePresence mode="wait" initial={false}>{uiT(isLoggedIn && currentAccount && userProfile ? <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }}>
-    <div className="sticky top-0 z-30 flex items-center gap-3 bg-slate-900 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] text-white"><button type="button" onClick={() => setActiveTab('profile')} className="flex min-w-0 items-center gap-2.5 rounded-xl text-left"><Avatar src={userProfile.avatarUrl} name={userProfile.name} size={32} className="rounded-[10px]"/><span className="min-w-0"><span className="block truncate text-[13px] font-medium leading-tight">{uiT(firstName(userProfile.name))}</span><span className="block truncate text-[11px] leading-tight text-slate-400">{uiT("Группа ")}{uiT(userProfile.group)}{uiT(" • Защищённый демо-кабинет")}</span></span></button></div>
+    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-slate-900 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] text-white"><button type="button" onClick={() => setActiveTab('profile')} className="flex min-w-0 items-center gap-2.5 rounded-xl text-left"><Avatar src={userProfile.avatarUrl} name={userProfile.name} size={32} className="rounded-[10px]"/><span className="min-w-0"><span className="block truncate text-[13px] font-medium leading-tight">{uiT(firstName(userProfile.name))}</span><span className="block truncate text-[11px] leading-tight text-slate-400">{uiT("Группа ")}{uiT(userProfile.group)}{uiT(" • Защищённый демо-кабинет")}</span></span></button><button type="button" onClick={() => setEnglish(!english)} aria-label={english ? 'Русский' : 'English'} className="shrink-0 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-white/10">{english ? 'RU' : 'EN'}</button></div>
     {uiT(actionError && <p role="alert" className="bg-rose-50 p-4 text-rose-800">{uiT(actionError)}<button onClick={() => setActionError('')} className="ml-3 underline">{uiT("OK")}</button></p>)}
-    {uiT((activeTab === 'dashboard') && <StudentHub user={userProfile} grades={grades} schedule={schedule} requests={requests} onNavigate={setActiveTab} onRequest={handleAddRequest} onOpenRequest={openRequest} english={english} setEnglish={setEnglish}/>)}
     <AnimatePresence mode="wait" initial={false} custom={direction}><motion.div key={activeTab} custom={direction} variants={pageVariants} initial="enter" animate="center" exit="exit" transition={{ x: { type: 'spring', stiffness: 420, damping: 40 }, opacity: { duration: 0.18 } }}>
       {uiT(activeTab === 'dashboard' && <DashboardView user={userProfile} schedule={schedule} notifications={notifications} requests={requests} onNavigate={setActiveTab} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onDemoCompleteRequest={handleDemoCompleteRequest}/>)}
       {uiT(activeTab === 'schedule' && <ScheduleView schedule={schedule}/>)}

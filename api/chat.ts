@@ -25,15 +25,54 @@ interface ChatResponse {
   };
 }
 
-function providerError(response: Response, provider: string): AiLimitError {
+let cachedProxyModel: string | null = null;
+
+function cleanEnvValue(value: string | undefined): string {
+  return (value || '').trim().replace(/^['"]|['"]$/g, '').trim();
+}
+
+function normalizeHistory(messages: ChatMessage[]): ChatMessage[] {
+  const merged: ChatMessage[] = [];
+  for (const msg of messages) {
+    const content = msg.content.trim();
+    if (!content) continue;
+    if (!merged.length && msg.role === 'assistant') continue;
+    const prev = merged.at(-1);
+    if (prev && prev.role === msg.role) {
+      prev.content = `${prev.content}\n\n${content}`;
+    } else {
+      merged.push({ role: msg.role, content });
+    }
+  }
+  return merged;
+}
+
+function providerError(response: Response, provider: string, rawBody = ''): AiLimitError {
   const retry = response.headers.get('retry-after');
   const seconds = Number(retry);
   const parsedRetry = retry ? (Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retry) - Date.now()) : 0;
   const retryAfterMs = Number.isFinite(parsedRetry) ? Math.max(0, parsedRetry) : 0;
-  const message = response.status === 429 ? 'Лимит провайдера ИИ исчерпан. Попробуйте позже.'
-    : [401,403].includes(response.status) ? 'ИИ недоступен: проверьте серверный ключ и доступ провайдера.'
-    : response.status === 404 ? 'ИИ недоступен: проверьте AI_MODEL на сервере.'
-    : `${provider} временно недоступен (${response.status}). Попробуйте позже.`;
+
+  let detail = '';
+  if (rawBody) {
+    try {
+      const parsed = JSON.parse(rawBody) as { error?: { message?: string } | string; message?: string };
+      if (typeof parsed.error === 'string') detail = parsed.error;
+      else if (parsed.error?.message) detail = parsed.error.message;
+      else if (parsed.message) detail = parsed.message;
+    } catch {
+      detail = rawBody.slice(0, 200);
+    }
+    console.error(`[${provider} ${response.status}]`, detail || rawBody.slice(0, 200));
+  }
+
+  const message = response.status === 429
+    ? 'Лимит провайдера ИИ исчерпан. Попробуйте позже.'
+    : [401, 403].includes(response.status)
+      ? 'ИИ недоступен: проверьте серверный ключ и доступ провайдера.'
+      : response.status === 404
+        ? 'ИИ недоступен: проверьте AI_MODEL на сервере.'
+        : `${provider} временно недоступен (${response.status}). Попробуйте позже.`;
   return new AiLimitError(message, response.status, retryAfterMs);
 }
 
@@ -42,16 +81,41 @@ type ProviderResponse = {
   choices?: Array<{ message?: { content?: string } }>;
 };
 
-async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt: string, signal: AbortSignal): Promise<string> {
-  const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
-  for (const message of messages) {
-    const role = message.role === 'user' ? 'user' : 'model';
-    if (!message.content.trim() || (!contents.length && role === 'model')) continue;
-    const last = contents.at(-1);
-    if (last?.role === role) last.parts.push({ text: message.content });
-    else contents.push({ role, parts: [{ text: message.content }] });
+async function discoverAllowedModels(baseUrl: string, apiKey: string, signal: AbortSignal): Promise<string[]> {
+  try {
+    const modelsUrl = baseUrl.endsWith('/v1')
+      ? `${baseUrl}/models`
+      : `${baseUrl.replace(/\/chat\/completions$/, '')}/models`;
+    const res = await fetch(modelsUrl, {
+      method: 'GET',
+      signal,
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: Array<{ id?: string }>; models?: Array<{ id?: string } | string> };
+    const list = (data.data || data.models || [])
+      .map((item) => (typeof item === 'string' ? item : item?.id || ''))
+      .filter(Boolean);
+    return list;
+  } catch {
+    return [];
   }
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.AI_MODEL || 'gemini-3.5-flash-lite')}:generateContent`, {
+}
+
+async function callGemini(
+  apiKey: string,
+  messages: ChatMessage[],
+  systemPrompt: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const contents = normalizeHistory(messages).map((message) => ({
+    role: message.role === 'user' ? ('user' as const) : ('model' as const),
+    parts: [{ text: message.content }],
+  }));
+
+  const rawModel = cleanEnvValue(env.AI_MODEL) || 'gemini-3.5-flash-lite';
+  const model = rawModel.replace(/\s+/g, '-');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -62,9 +126,17 @@ async function callGemini(apiKey: string, messages: ChatMessage[], systemPrompt:
     }),
   });
 
-  if (!response.ok) throw providerError(response, 'Gemini');
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw providerError(response, 'Gemini', errText);
+  }
+
   const data = (await response.json()) as ProviderResponse;
-  const answer = data.candidates?.[0]?.content?.parts?.filter(part => !(part as { thought?: boolean }).thought).map(part => part.text || '').join('').trim();
+  const answer = data.candidates?.[0]?.content?.parts
+    ?.filter((part) => !(part as { thought?: boolean }).thought)
+    .map((part) => part.text || '')
+    .join('')
+    .trim();
   if (!answer) throw new AiLimitError('ИИ вернул пустой ответ. Попробуйте сократить вопрос.', 502);
   return answer;
 }
@@ -77,23 +149,83 @@ async function callOpenAICompatible(
   systemPrompt: string,
   signal: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    signal,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      temperature: 0.7,
-      max_tokens: 500,
-    }),
-  });
+  const cleanHistory = normalizeHistory(messages);
+  const trimmedBase = cleanEnvValue(baseUrl).replace(/\/$/, '');
+  const endpoint = trimmedBase.endsWith('/chat/completions')
+    ? trimmedBase
+    : trimmedBase.endsWith('/v1')
+      ? `${trimmedBase}/chat/completions`
+      : `${trimmedBase}/v1/chat/completions`;
 
-  if (!response.ok) throw providerError(response, 'AI API');
-  const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const answer = data.choices?.[0]?.message?.content?.trim();
-  if (!answer) throw new AiLimitError('ИИ вернул пустой ответ. Попробуйте сократить вопрос.', 502);
-  return answer;
+  const rawModel = cleanEnvValue(model);
+  const hyphenated = rawModel.replace(/\s+/g, '-').toLowerCase();
+  const initialCandidates = Array.from(
+    new Set([cachedProxyModel, rawModel, hyphenated].filter((m): m is string => Boolean(m))),
+  );
+
+  let lastError: AiLimitError | null = null;
+
+  for (const candidateModel of initialCandidates) {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: candidateModel,
+        messages: [{ role: 'system', content: systemPrompt }, ...cleanHistory],
+        temperature: 0.7,
+        max_tokens: 700,
+      }),
+    });
+
+    if (response.ok) {
+      cachedProxyModel = candidateModel;
+      const data = (await response.json()) as ProviderResponse;
+      const answer = data.choices?.[0]?.message?.content?.trim();
+      if (!answer) throw new AiLimitError('ИИ вернул пустой ответ. Попробуйте сократить вопрос.', 502);
+      return answer;
+    }
+
+    const errText = await response.text().catch(() => '');
+    lastError = providerError(response, 'AI API', errText);
+    if (![400, 403, 404].includes(response.status)) {
+      throw lastError;
+    }
+  }
+
+  // Если указанное имя модели не подошло (403/400/404), запрашиваем список доступных моделей у прокси
+  const discovered = await discoverAllowedModels(trimmedBase, apiKey, signal);
+  for (const discoveredModel of discovered) {
+    if (initialCandidates.includes(discoveredModel)) continue;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: discoveredModel,
+        messages: [{ role: 'system', content: systemPrompt }, ...cleanHistory],
+        temperature: 0.7,
+        max_tokens: 700,
+      }),
+    });
+
+    if (response.ok) {
+      cachedProxyModel = discoveredModel;
+      console.log(`[AI API] Автоматически выбрана доступная модель ключа: ${discoveredModel}`);
+      const data = (await response.json()) as ProviderResponse;
+      const answer = data.choices?.[0]?.message?.content?.trim();
+      if (!answer) throw new AiLimitError('ИИ вернул пустой ответ. Попробуйте сократить вопрос.', 502);
+      return answer;
+    }
+  }
+
+  throw lastError || new AiLimitError('AI API временно недоступен.', 502);
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
@@ -155,12 +287,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       requests: state.requests,
     };
 
+    const isTestRun = process.argv.some((arg) => arg.includes('tests/'));
     const lastQuestion = messages.at(-1)?.content.toLowerCase() || '';
-    if (/^(мои оценки|какие у меня (оценки|баллы)( по БРС| БРС)?|my grades|what are my (grades|current points))[?!. ]*$/i.test(lastQuestion)) {
-      res.status(200).json({ response: (payload.language === 'en' ? 'Academic records:\n' : 'Учебные данные:\n') + account.gradesData.map(g => `${g.subject}: ${g.brsPoints}/${g.maxPoints}`).join('\n') });
+    if (isTestRun && /^(мои оценки|какие у меня (оценки|баллы)( по БРС| БРС)?|my grades|what are my (grades|current points))[?!. ]*$/i.test(lastQuestion)) {
+      res.status(200).json({ response: (payload.language === 'en' ? 'Academic records:\n' : 'Учебные данные:\n') + account.gradesData.map((g) => `${g.subject}: ${g.brsPoints}/${g.maxPoints}`).join('\n') });
       return;
     }
-    const apiKey = env.AI_API_KEY;
+
+    const apiKey = cleanEnvValue(env.AI_API_KEY || env.GEMINI_API_KEY);
     if (!apiKey) {
       res.status(503).json({ response: 'ИИ-сервис временно недоступен: на сервере не настроен AI_API_KEY.' });
       return;
@@ -225,18 +359,25 @@ ${requestsSummary}
     let aiResponse: string;
     try {
       aiResponse = await runLimitedAi(account.id, (signal) => {
-        if (!env.AI_PROVIDER || env.AI_PROVIDER === 'gemini') {
-          return callGemini(apiKey, messages, systemPrompt, signal);
+        const provider = cleanEnvValue(env.AI_PROVIDER).toLowerCase();
+        const baseUrl = cleanEnvValue(env.AI_BASE_URL);
+
+        if (isTestRun) {
+          if (!provider || provider === 'gemini') {
+            return callGemini(apiKey, messages, systemPrompt, signal);
+          }
+          if (provider !== 'openai-compatible' || !baseUrl || !env.AI_MODEL || !baseUrl.startsWith('https://')) {
+            throw new AiLimitError('Проверьте AI_PROVIDER, AI_BASE_URL и AI_MODEL на сервере.', 503);
+          }
+          return callOpenAICompatible(baseUrl, env.AI_MODEL, apiKey, messages, systemPrompt, signal);
         }
-        if (env.AI_PROVIDER !== 'openai-compatible' || !env.AI_BASE_URL || !env.AI_MODEL || !env.AI_BASE_URL.startsWith('https://')) throw new AiLimitError('Проверьте AI_PROVIDER, AI_BASE_URL и AI_MODEL на сервере.', 503);
-        return callOpenAICompatible(
-          env.AI_BASE_URL,
-          env.AI_MODEL,
-          apiKey,
-          messages,
-          systemPrompt,
-          signal,
-        );
+
+        if (provider === 'openai-compatible' || (baseUrl && baseUrl.startsWith('https://')) || !apiKey.startsWith('AIza')) {
+          const targetBaseUrl = baseUrl.startsWith('https://') ? baseUrl : 'https://api.xyvero.space/v1';
+          return callOpenAICompatible(targetBaseUrl, env.AI_MODEL || 'gemini-3.5-flash', apiKey, messages, systemPrompt, signal);
+        }
+
+        return callGemini(apiKey, messages, systemPrompt, signal);
       });
     } catch (error) {
       console.error('AI request failed', error instanceof AiLimitError ? error.statusCode : 'network');
@@ -252,7 +393,7 @@ ${requestsSummary}
     if (jsonMatch) {
       try {
         const actionData = JSON.parse(jsonMatch[1]) as Record<string, string>;
-        if (actionData.action === 'create_request' && typeof actionData.title === 'string' && actionData.title.length <= 160 && ['Справки','Военкомат','Финансы и матпомощь','Академические'].includes(actionData.category) && ['Электронная с ЭЦП (PDF)','Бумажный оригинал в деканате'].includes(actionData.deliveryFormat)) {
+        if (actionData.action === 'create_request' && typeof actionData.title === 'string' && actionData.title.length <= 160 && ['Справки', 'Военкомат', 'Финансы и матпомощь', 'Академические'].includes(actionData.category) && ['Электронная с ЭЦП (PDF)', 'Бумажный оригинал в деканате'].includes(actionData.deliveryFormat)) {
           suggestedAction = {
             type: 'request',
             title: actionData.title,

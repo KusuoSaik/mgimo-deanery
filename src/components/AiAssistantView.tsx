@@ -81,7 +81,7 @@ export default function AiAssistantView({ user, ownerId, language, messages, onM
         const timer = setTimeout(() => controller.abort(), 55000);
         try {
             const response = await fetch('/api/chat', {
-                credentials: 'same-origin',
+                credentials: 'include',
                 signal: controller.signal,
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
