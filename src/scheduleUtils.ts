@@ -31,7 +31,7 @@ export function weekdayLabel(date: Date): ScheduleItem['day'] | null {
   return WEEK_DAYS[day - 1] ?? null;
 }
 
-function parseTimeRange(time: string): { start: number; end: number } | null {
+export function parseTimeRange(time: string): { start: number; end: number } | null {
   const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   const [sh, sm, eh, em] = match.slice(1).map(Number);

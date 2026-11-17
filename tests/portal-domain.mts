@@ -6,10 +6,17 @@ import { ACCOUNTS_DATABASE } from '../src/auth/accountsDatabase.ts';
 import { createCertificatePdf } from '../src/certificatePdf.ts';
 assert.equal(requestDueAt('13.11.2026').slice(0, 10), '2026-11-18');
 for (const input of ['2026-11-15T22:30:00Z', '2026-12-31T23:30:00Z', '2027-02-26T23:30:00Z']) {
-  const slots = availableSlots('test', new Date(input)); assert.equal(slots.length, 3);
+  const slots = availableSlots('test', new Date(input), [], []); assert.equal(slots.length, 3);
   assert(slots.every(s => Date.parse(s.startsAt) > Date.parse(input)));
   assert(slots.every(s => ![0, 6].includes(new Date(s.startsAt).getUTCDay())));
 }
+// Monday 16 November: a class overlaps noon, an existing booking occupies 14:00.
+const sunday = new Date('2026-11-15T10:00:00Z');
+const lesson = { ...ACCOUNTS_DATABASE[0].scheduleData[0], day: 'Пн' as const, weekType: 'both' as const, time: '11:50 – 12:10' };
+const booking = { id: 'existing', gradeId: 'other', startsAt: '2026-11-16T11:00:00Z', status: 'booked' as const };
+assert.equal(availableSlots('test', sunday, [lesson], [booking])[0].startsAt, '2026-11-16T13:00:00.000Z');
+assert.equal(availableSlots('test', sunday, [lesson], [{ ...booking, status: 'cancelled' }])[0].startsAt, '2026-11-16T11:00:00.000Z');
+assert.equal(availableSlots('test', sunday, [{ ...lesson, time: '10:30 – 12:00' }], [])[0].startsAt, '2026-11-16T09:00:00.000Z');
 const user = ACCOUNTS_DATABASE[0].profile;
 const request = { ...ACCOUNTS_DATABASE[0].requestsData[0], stage: 5 as const, status: 'Готово к выдаче' as const, title: 'Справка об обучении — ' + 'Тест'.repeat(30), timestamps: { ready: '2026-11-19T12:00:00Z' } };
 const font = await readFile('public/fonts/NotoSans-Regular.ttf');

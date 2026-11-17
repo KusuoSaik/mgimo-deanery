@@ -12,11 +12,14 @@ import { Avatar, Badge, EmptyState, PageHeader, RollingText, SectionTitle, Segme
 import { Guilloche } from './ui/Guilloche';
 import { PseudoQr } from './ui/PseudoQr';
 import { CLASS_TYPE_TONE, REQUEST_STATUS_TONE, firstName, greeting } from './ui/tokens';
+import { isActiveRequest, requestLabel } from '../portalDomain';
+import type { RequestDetails } from '../portalDomain';
 type DashboardViewProps = {
     user: UserProfile;
     schedule: ScheduleItem[];
     notifications: NotificationItem[];
     requests: RequestItem[];
+    details: Record<string, RequestDetails>;
     onNavigate: (tab: TabType) => void;
     onMarkNotificationRead: (id: string) => void;
     onMarkAllNotificationsRead: () => void;
@@ -45,7 +48,7 @@ function dayLabel(date: Date, now: Date, locale = 'ru-RU'): string {
     const text = date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
-export default function DashboardView({ user, schedule, notifications, requests, onNavigate, onMarkNotificationRead, onMarkAllNotificationsRead, priorities, onOpenRequest, }: DashboardViewProps) {
+export default function DashboardView({ user, schedule, notifications, requests, details, onNavigate, onMarkNotificationRead, onMarkAllNotificationsRead, priorities, onOpenRequest, }: DashboardViewProps) {
     const uiT = useUI();
     const [now, setNow] = useState(() => new Date());
     const [studakOpen, setStudakOpen] = useState(false);
@@ -63,7 +66,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
     const upcoming = findUpcomingClass(schedule, now);
     const unread = notifications.filter((item) => !item.isRead).length;
     const visibleNotifications = notifications.filter((item) => notificationFilter === 'all' || !item.isRead);
-    const activeRequests = requests.filter((item) => item.stage !== 5);
+    const activeRequests = requests.filter(item => isActiveRequest(item, details[item.id]));
     const live = upcoming ? now.getTime() >= upcoming.start.getTime() : false;
     const countdown = upcoming
         ? formatCountdown((live ? upcoming.end.getTime() : upcoming.start.getTime()) - now.getTime(), uiT.locale)
@@ -244,7 +247,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
                         {uiT([1, 2, 3, 4, 5].map((step) => (<motion.span key={step} initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.05 * step, duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className={`h-1 flex-1 origin-left rounded-full ${step <= item.stage ? 'bg-blue-600' : 'bg-slate-200'}`}/>)))}
                       </div>
                     </div>
-                    <Badge className={REQUEST_STATUS_TONE[item.status]}>{uiT(item.status)}</Badge>
+                    <Badge className={details[item.id]?.lifecycle === 'needs_info' ? 'border-amber-200 bg-amber-50 text-amber-800' : REQUEST_STATUS_TONE[item.status]}>{uiT(requestLabel(item, details[item.id]))}</Badge>
                   </button>
                 </li>)))}
             </ul>))}

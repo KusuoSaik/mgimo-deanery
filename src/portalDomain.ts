@@ -1,4 +1,5 @@
-import type { GradeItem, RequestItem } from './types.js';
+import { academicWeekType, parseTimeRange, weekdayLabel } from './scheduleUtils.js';
+import type { GradeItem, RequestItem, ScheduleItem } from './types.js';
 
 export type RequestLifecycle = 'active' | 'needs_info' | 'cancelled';
 export interface RequestEvent { id: string; at: string; actor: 'student' | 'staff'; text: string }
@@ -33,16 +34,28 @@ export function requestLabel(request: RequestItem, details?: RequestDetails): st
 export function isActiveRequest(request: RequestItem, details?: RequestDetails): boolean {
   return request.stage < 5 && details?.lifecycle !== 'cancelled';
 }
-export function availableSlots(gradeId: string, now = new Date()): ConsultationSlot[] {
-  const day = moscowDay(now);
-  const date = new Date(`${day}T12:00:00+03:00`);
+// A demo consultation lasts 30 minutes. Offer up to three different working days.
+export function availableSlots(gradeId: string, now: Date, schedule: ScheduleItem[], bookings: Consultation[]): ConsultationSlot[] {
+  const [year, month, day] = moscowDay(now).split('-').map(Number);
   const slots: ConsultationSlot[] = [];
-  // Rolling demo slots are always in the future, in Moscow time, on weekdays.
-  for (let i = 0; slots.length < 3 && i < 10; i++) {
-    date.setUTCDate(date.getUTCDate() + 1);
-    if ([0, 6].includes(date.getUTCDay())) continue;
-    const startsAt = date.toISOString();
-    slots.push({ id: `${gradeId}:${startsAt}`, startsAt });
+  for (let offset = 1; offset <= 14 && slots.length < 3; offset++) {
+    const date = new Date(year, month - 1, day + offset, 12);
+    const weekday = weekdayLabel(date);
+    if (!weekday || weekday === 'Сб') continue;
+    const parity = academicWeekType(date);
+    const lessons = schedule.filter(item => item.day === weekday && (item.weekType === 'both' || item.weekType === parity));
+    const ranges = lessons.map(item => parseTimeRange(item.time));
+    // A malformed class time cannot be treated as free time.
+    if (ranges.some(range => !range)) continue;
+    for (const hour of [12, 14, 16]) {
+      const start = hour * 60;
+      if (ranges.some(range => range && start < range.end && start + 30 > range.start)) continue;
+      const instant = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), hour - 3);
+      if (bookings.some(b => b.status === 'booked' && Math.abs(Date.parse(b.startsAt) - instant) < 30 * 60_000)) continue;
+      const startsAt = new Date(instant).toISOString();
+      slots.push({ id: `${gradeId}:${startsAt}`, startsAt });
+      break;
+    }
   }
   return slots;
 }

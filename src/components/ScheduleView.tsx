@@ -2,7 +2,7 @@ import { useUI } from '../i18n';
 import { useMemo, useState } from 'react';
 import { motion } from '../motion';
 import { AnimatePresence } from 'framer-motion';
-import { Coffee, Download, CalendarCheck } from 'lucide-react';
+import { Coffee, Download, CalendarCheck, ChevronDown } from 'lucide-react';
 import { scheduleCalendar } from '../scheduleCalendar';
 import { WEEK_DAYS, academicWeekType, weekdayLabel, moscowClock } from '../scheduleUtils';
 import type { WeekParity } from '../scheduleUtils';
@@ -23,7 +23,7 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
     const now = moscowClock();
     const today = weekdayLabel(now);
     const currentWeek = academicWeekType(now);
-    const [weekType, setWeekType] = useState<WeekParity>(currentWeek);
+    const [weekType, setWeekType] = useState<WeekParity>(() => today ? currentWeek : academicWeekType(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)));
     const [day, setDay] = useState<ScheduleItem['day']>(today ?? 'Пн');
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('Все');
     const [view, setView] = useState<'day' | 'week'>('day');
@@ -43,7 +43,7 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
     const lessons = schedule
         .filter((item) => item.day === day && inWeek(item) && (typeFilter === 'Все' || item.type === typeFilter))
         .slice()
-        .sort((a, b) => a.time.localeCompare(b.time, 'ru'));
+        .sort((a, b) => a.time.localeCompare(b.time, 'ru', { numeric: true }));
     function selectDay(label: ScheduleItem['day']) {
         setView('day');
         setDirection(WEEK_DAYS.indexOf(label) >= WEEK_DAYS.indexOf(day) ? 1 : -1);
@@ -65,7 +65,7 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
 
         <div className="mt-3 grid grid-cols-6 gap-1">
           {uiT(WEEK_DAYS.map((label, index) => {
-            const selected = label === day;
+            const selected = view === 'day' && label === day;
             const isToday = isCurrentWeek && label === today;
             const count = countByDay[label];
             return (<button key={label} type="button" onClick={() => selectDay(label)} aria-pressed={selected} className={`relative flex flex-col items-center rounded-2xl py-2 transition-colors duration-200 ${selected ? 'text-slate-900' : 'text-slate-300 hover:text-white'}`}>
@@ -89,13 +89,23 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
         {!isCurrentWeek && <button type="button" onClick={() => { setWeekType(currentWeek); if (today) selectDay(today); }} className="flex min-h-11 items-center gap-2 text-sm font-medium text-blue-700"><CalendarCheck className="h-4 w-4"/>{uiT('Вернуться к текущей неделе')}</button>}
         <Chips id="lesson-type" value={typeFilter} onChange={setTypeFilter} options={(['Все', 'Лекция', 'Семинар', 'Язык'] as const).map((type) => ({ value: type, label: type }))}/>
 
-        {view === 'week' ? <section aria-label={uiT('Расписание на неделю')} className="space-y-5">
+        {view === 'week' ? <section aria-label={uiT('Расписание на неделю')} className="space-y-2">
           {dates.map((date, index) => {
-            const items = schedule.filter(item => item.day === WEEK_DAYS[index] && inWeek(item) && (typeFilter === 'Все' || item.type === typeFilter)).sort((a, b) => a.time.localeCompare(b.time));
-            return <section key={date.toISOString()} className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">{date.toLocaleDateString(uiT.locale, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
-              {items.length ? <ol className="space-y-2">{items.map((item, i) => <InteractiveScheduleCard key={item.id} item={item} index={i} isToday={isCurrentWeek && item.day === today}/>)}</ol> : <p className="rounded-xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{uiT(typeFilter === 'Все' ? 'Занятий нет' : 'Нет занятий по выбранному фильтру')}</p>}
-            </section>;
+            const items = schedule.filter(item => item.day === WEEK_DAYS[index] && inWeek(item) && (typeFilter === 'Все' || item.type === typeFilter)).sort((a, b) => a.time.localeCompare(b.time, 'ru', { numeric: true }));
+            const changes = items.filter(item => item.changeNote).length;
+            const label = date.toLocaleDateString(uiT.locale, { weekday: 'long', day: 'numeric', month: 'short' });
+            return <details key={`${date.toISOString()}-${typeFilter}`} className="group rounded-2xl border border-slate-200 bg-white">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-blue-600">
+                <span className="min-w-0 flex-1">
+                  <strong className="block text-sm capitalize text-slate-900">{label}</strong>
+                  <span className="text-xs text-slate-600">{items.length ? uiT(`${items.length} ${plural(items.length, ['пара', 'пары', 'пар'])}`) : uiT(typeFilter === 'Все' ? 'Занятий нет' : 'Нет занятий по выбранному фильтру')}</span>
+                  {changes > 0 && <span className="ml-2 text-xs font-semibold text-amber-800">{uiT('Изменения')} · {changes}</span>}
+                </span>
+                <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500 group-open:rotate-180"/>
+              </summary>
+              {items.length > 0 ? <ol className="space-y-2 border-t border-slate-100 p-3">{items.map((item, i) => <InteractiveScheduleCard key={item.id} item={item} index={i} isToday={isCurrentWeek && item.day === today}/>)}</ol> :
+                <p className="px-4 pb-3 text-xs text-slate-600">{uiT(typeFilter === 'Все' ? 'В этот день пар нет.' : 'Выберите другой тип занятий.')}</p>}
+            </details>;
           })}
         </section> : <>
         <div className="flex items-baseline justify-between px-0.5">

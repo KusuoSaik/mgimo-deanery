@@ -30,6 +30,14 @@ try {
   await page.getByRole('region', { name: 'Расписание на неделю', exact: true }).waitFor();
   await noOverflow('Full week 360');
   await page.screenshot({ path: out + '/schedule-week-360.png', fullPage: true });
+  const days = page.getByRole('region', { name: 'Расписание на неделю', exact: true }).locator('details');
+  assert.equal(await days.count(), 6);
+  const teachingDay = days.filter({ has: page.locator('ol') }).first();
+  await teachingDay.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await teachingDay.locator('ol').waitFor();
+  await page.keyboard.press('Enter');
+  await teachingDay.locator('ol').waitFor({ state: 'hidden' });
   const calendarDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'В календарь', exact: true }).click();
   const calendar = await calendarDownload;

@@ -80,7 +80,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       } else if (action === 'book_consultation') {
         const grade = account.gradesData.find(g => g.id === body.gradeId);
         if (!grade) throw new ActionError('Дисциплина не найдена.', 404);
-        const slot = availableSlots(grade.id, now).find(s => s.id === body.slotId);
+        const slot = availableSlots(grade.id, now, account.scheduleData, state.consultations ?? []).find(s => s.id === body.slotId);
         if (!slot || Date.parse(slot.startsAt) <= now.getTime()) throw new ActionError('Окно устарело. Обновите список.', 409);
         state.consultations ??= [];
         if (state.consultations.some(c => c.gradeId === grade.id && c.status === 'booked' && Date.parse(c.startsAt) > now.getTime())) throw new ActionError('У вас уже есть запись по этому предмету.', 409);

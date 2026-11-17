@@ -13,9 +13,16 @@ export default function PrioritiesCard({ grades, requests, details, schedule, co
   const now = new Date();
   const items: { id: string; title: string; note: string; action: () => void }[] = [];
   for (const r of requests.filter(r => details[r.id]?.lifecycle === 'needs_info')) items.push({ id: r.id, title: t('Деканат ждёт уточнение', 'Staff need clarification'), note: r.title, action: () => onOpenRequest(r.id) });
-  for (const grade of grades.filter(g => g.brsPoints < 70)) items.push({ id: grade.id, title: grade.subject, note: t(`До демо-порога допуска: ${70 - grade.brsPoints} б.`, `${70 - grade.brsPoints} points to the demo admission threshold.`), action: () => onOpenGrade(grade.id) });
+  const upcomingBookings = consultations.filter(c => c.status === 'booked' && Date.parse(c.startsAt) > now.getTime());
+  for (const grade of grades.filter(g => g.brsPoints < 70)) {
+    const booked = upcomingBookings.find(c => c.gradeId === grade.id);
+    const note = booked
+      ? t(`Консультация · ${prettyDate(booked.startsAt, en)} МСК`, `Consultation · ${prettyDate(booked.startsAt, en)} MSK`)
+      : t(`До демо-порога допуска: ${70 - grade.brsPoints} б.`, `${70 - grade.brsPoints} points to the demo admission threshold.`);
+    items.push({ id: grade.id, title: grade.subject, note, action: () => onOpenGrade(grade.id) });
+  }
   for (const r of requests.filter(r => r.stage === 5 && details[r.id]?.lifecycle !== 'cancelled')) items.push({ id: r.id, title: t('Документ готов', 'Document ready'), note: r.title, action: () => onOpenRequest(r.id) });
-  for (const c of consultations.filter(c => c.status === 'booked' && Date.parse(c.startsAt) > now.getTime()).sort((a, b) => a.startsAt.localeCompare(b.startsAt))) items.push({ id: c.id, title: t('Предстоит консультация', 'Upcoming consultation'), note: `${grades.find(g => g.id === c.gradeId)?.subject ?? ''} · ${prettyDate(c.startsAt, en)}`, action: () => onOpenGrade(c.gradeId) });
+  for (const c of upcomingBookings.slice().sort((a, b) => a.startsAt.localeCompare(b.startsAt))) items.push({ id: c.gradeId, title: t('Предстоит консультация', 'Upcoming consultation'), note: `${grades.find(g => g.id === c.gradeId)?.subject ?? ''} · ${prettyDate(c.startsAt, en)}`, action: () => onOpenGrade(c.gradeId) });
   const upcoming = findUpcomingClass(schedule, now);
   if (upcoming?.item.changeNote) items.push({ id: 'schedule', title: t('Изменение расписания', 'Schedule change'), note: `${upcoming.item.subject} · ${upcoming.item.changeNote}`, action: () => onNavigate('schedule') });
   for (const r of requests.filter(r => isActiveRequest(r, details[r.id]) && details[r.id] && Date.parse(details[r.id].dueAt) < now.getTime())) items.push({ id: r.id, title: t('Ожидаемый срок прошёл', 'Estimated date has passed'), note: r.title, action: () => onOpenRequest(r.id) });

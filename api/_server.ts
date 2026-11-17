@@ -134,7 +134,8 @@ export function publicAccount(account: StoredAccount, state?: StoredDemoState): 
   safe.direction = directionFor(account.profile.group);
   safe.academicResultsData = academicResults(account.gradesData, account.profile.course, account.id);
   safe.consultationsData = state?.consultations ?? [];
-  safe.consultationSlotsData = Object.fromEntries(account.gradesData.map(g => [g.id, availableSlots(g.id)]));
+  const now = new Date();
+  safe.consultationSlotsData = Object.fromEntries(account.gradesData.map(g => [g.id, availableSlots(g.id, now, account.scheduleData, state?.consultations ?? [])]));
   safe.requestDetailsData = Object.fromEntries((state?.requests ?? account.requestsData).map(r => [r.id, requestDetails(r, state?.requestDetails?.[r.id])]));
   if (state) {
     safe.requestsData = state.requests;
