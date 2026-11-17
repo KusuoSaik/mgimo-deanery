@@ -1,5 +1,7 @@
 import type { RequestItem } from '../types';
 import type { AuthCredentials, RegisterData, StoredAccount } from './types.js';
+import { requestJson, ApiError } from './requestJson';
+export { ApiError } from './requestJson';
 
 type ApiResult = {
   authenticated?: boolean;
@@ -8,17 +10,8 @@ type ApiResult = {
   createdRequest?: RequestItem;
 };
 
-export class ApiError extends Error { readonly status: number; constructor(message: string, status: number) { super(message); this.status = status; } }
-
 async function api<T extends ApiResult>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  });
-  const data = (await response.json().catch(() => ({}))) as T;
-  if (!response.ok) throw new ApiError(data.error || 'Сервер временно недоступен', response.status);
-  return data;
+  return requestJson<T>(path, init);
 }
 
 export async function login(credentials: AuthCredentials): Promise<{ success: boolean; account?: StoredAccount; error?: string }> {
@@ -50,6 +43,11 @@ export async function performStudentAction(action: string, payload: Record<strin
     method: action === 'refresh' ? 'GET' : 'POST', signal, ...(action === 'refresh' ? {} : { body: JSON.stringify({ action, ...payload }) }),
   });
   if (!result.account) throw new Error(result.error || 'Не удалось обновить данные');
+  // Cookies are shared between tabs. A GET refresh must not silently replace
+  // the account bound to this tab after another tab signs into a different user.
+  if (result.account.id !== payload.ownerId) {
+    throw new ApiError('Аккаунт изменился в другой вкладке. Обновите страницу и войдите снова.', 409);
+  }
   return { account: result.account, createdRequest: result.createdRequest };
 }
 

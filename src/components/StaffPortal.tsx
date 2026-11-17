@@ -3,10 +3,9 @@ import { RefreshCw, LogOut, ShieldCheck } from 'lucide-react';
 import type { StaffStudent } from '../portalDomain';
 import { prettyDate, requestLabel } from '../portalDomain';
 import { usePreferences } from '../preferences';
+import { requestJson } from '../auth/requestJson';
 async function loadQueue(signal?: AbortSignal): Promise<StaffStudent[]> {
-  const response = await fetch('/api/staff', { credentials: 'include', signal });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Не удалось загрузить очередь.');
+  const data = await requestJson<{ students: StaffStudent[] }>('/api/staff', { signal });
   return data.students;
 }
 const primary = 'rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50';
@@ -33,9 +32,7 @@ export default function StaffPortal({ name, onLogout }: { name: string; onLogout
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
     try {
-      const response = await fetch('/api/staff', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, studentId: student.id, id, text: comments[id] ?? '', expectedRevision: student.details[id].revision, operationId: crypto.randomUUID() }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Не удалось сохранить.');
+      const data = await requestJson<{ student: StaffStudent }>('/api/staff', { method: 'POST', body: JSON.stringify({ action, studentId: student.id, id, text: comments[id] ?? '', expectedRevision: student.details[id].revision, operationId: crypto.randomUUID() }) });
       if (mounted.current) { setStudents(previous => previous.map(s => s.id === student.id ? data.student : s)); setComments(previous => ({ ...previous, [id]: '' })); }
     } catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : 'Ошибка сервера'); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }

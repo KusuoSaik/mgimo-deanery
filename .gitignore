@@ -27,3 +27,8 @@ dist-ssr
 # Local patch payloads and installer backups
 /patch/
 /.patch-backups/
+
+build-server
+.env.*
+!.env.example
+artifacts

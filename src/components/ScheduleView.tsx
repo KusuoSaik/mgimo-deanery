@@ -2,8 +2,9 @@ import { useUI } from '../i18n';
 import { useMemo, useState } from 'react';
 import { motion } from '../motion';
 import { AnimatePresence } from 'framer-motion';
-import { Coffee } from 'lucide-react';
-import { WEEK_DAYS, academicWeekType, weekdayLabel } from '../scheduleUtils';
+import { Coffee, Download, CalendarCheck } from 'lucide-react';
+import { scheduleCalendar } from '../scheduleCalendar';
+import { WEEK_DAYS, academicWeekType, weekdayLabel, moscowClock } from '../scheduleUtils';
 import type { WeekParity } from '../scheduleUtils';
 import type { ScheduleItem } from '../types';
 import { InteractiveScheduleCard } from './InteractiveScheduleCard';
@@ -19,15 +20,16 @@ function mondayOf(date: Date): Date {
 }
 export default function ScheduleView({ schedule }: ScheduleViewProps) {
     const uiT = useUI();
-    const now = new Date();
+    const now = moscowClock();
     const today = weekdayLabel(now);
     const currentWeek = academicWeekType(now);
     const [weekType, setWeekType] = useState<WeekParity>(currentWeek);
     const [day, setDay] = useState<ScheduleItem['day']>(today ?? 'Пн');
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('Все');
+    const [view, setView] = useState<'day' | 'week'>('day');
     const [direction, setDirection] = useState(1);
     const weekStart = useMemo(() => {
-        const monday = mondayOf(new Date());
+        const monday = mondayOf(moscowClock());
         if (weekType !== currentWeek)
             monday.setDate(monday.getDate() + 7);
         return monday;
@@ -43,10 +45,17 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
         .slice()
         .sort((a, b) => a.time.localeCompare(b.time, 'ru'));
     function selectDay(label: ScheduleItem['day']) {
+        setView('day');
         setDirection(WEEK_DAYS.indexOf(label) >= WEEK_DAYS.indexOf(day) ? 1 : -1);
         setDay(label);
     }
     const isCurrentWeek = weekType === currentWeek;
+    function downloadCalendar() {
+        const url = URL.createObjectURL(new Blob([scheduleCalendar(schedule, weekStart)], { type: 'text/calendar;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url; link.download = `study-week-${weekStart.getFullYear()}-${weekStart.getMonth() + 1}-${weekStart.getDate()}.ics`;
+        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
     return (<div className="pb-24">
       <PageHeader title={uiT("Расписание")} subtitle={uiT(`${isCurrentWeek ? 'Эта неделя' : 'Следующая неделя'}, ${range}`)}>
         <Segmented id="week" tone="dark" className="mt-4" value={weekType} onChange={setWeekType} options={[
@@ -72,8 +81,23 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
       </PageHeader>
 
       <div className="space-y-4 px-4 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented id="schedule-view" className="min-w-0 flex-1" value={view} onChange={setView} options={[{ value: 'day', label: 'День' }, { value: 'week', label: 'Неделя' }]}/>
+          <button type="button" onClick={downloadCalendar} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-blue-700"><Download className="h-4 w-4"/>{uiT('В календарь')}</button>
+        </div>
+        <p className="text-xs text-slate-500">{uiT('Время занятий — МСК. Экспорт .ics сохраняет выбранную неделю без фильтров.')}</p>
+        {!isCurrentWeek && <button type="button" onClick={() => { setWeekType(currentWeek); if (today) selectDay(today); }} className="flex min-h-11 items-center gap-2 text-sm font-medium text-blue-700"><CalendarCheck className="h-4 w-4"/>{uiT('Вернуться к текущей неделе')}</button>}
         <Chips id="lesson-type" value={typeFilter} onChange={setTypeFilter} options={(['Все', 'Лекция', 'Семинар', 'Язык'] as const).map((type) => ({ value: type, label: type }))}/>
 
+        {view === 'week' ? <section aria-label={uiT('Расписание на неделю')} className="space-y-5">
+          {dates.map((date, index) => {
+            const items = schedule.filter(item => item.day === WEEK_DAYS[index] && inWeek(item) && (typeFilter === 'Все' || item.type === typeFilter)).sort((a, b) => a.time.localeCompare(b.time));
+            return <section key={date.toISOString()} className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-900">{date.toLocaleDateString(uiT.locale, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
+              {items.length ? <ol className="space-y-2">{items.map((item, i) => <InteractiveScheduleCard key={item.id} item={item} index={i} isToday={isCurrentWeek && item.day === today}/>)}</ol> : <p className="rounded-xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{uiT(typeFilter === 'Все' ? 'Занятий нет' : 'Нет занятий по выбранному фильтру')}</p>}
+            </section>;
+          })}
+        </section> : <>
         <div className="flex items-baseline justify-between px-0.5">
           <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">
             {uiT(dates[WEEK_DAYS.indexOf(day)].toLocaleDateString(uiT.locale, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, (c) => c.toUpperCase()))}
@@ -90,6 +114,7 @@ export default function ScheduleView({ schedule }: ScheduleViewProps) {
               </ol>))}
           </motion.div>
         </AnimatePresence>
+        </>}
       </div>
     </div>);
 }

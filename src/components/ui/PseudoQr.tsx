@@ -50,7 +50,7 @@ export function PseudoQr({ token, className = '' }: { token: string; className?:
   ];
 
   return (
-    <svg viewBox={`-1 -1 ${SIZE + 2} ${SIZE + 2}`} className={className} role="img" aria-label={uiT("QR-код пропуска")} shapeRendering="crispEdges">
+    <svg viewBox={`-1 -1 ${SIZE + 2} ${SIZE + 2}`} className={className} role="img" aria-label={uiT("Декоративный код демо-пропуска")} shapeRendering="crispEdges">
       <rect x={-1} y={-1} width={SIZE + 2} height={SIZE + 2} fill="#fff" />
       {cells.map(({ x, y }) =>
         isFinder(x, y) ? null : <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill="#0f172a" />,

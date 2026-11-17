@@ -19,6 +19,7 @@ import ScheduleView from './components/ScheduleView';
 import type { NotificationItem, RequestItem, TabType, UserProfile, ScheduleItem, GradeItem, ChatMessage } from './types';
 import { getCurrentUser, logout, performStudentAction } from './auth/authService';
 import type { StoredAccount } from './auth/types';
+import ConnectionStatus from './components/ConnectionStatus';
 
 const TABS: {
     id: TabType;
@@ -138,10 +139,7 @@ export default function App() {
             background('reset_demo');
     }
     function handleClearChat() {
-        const firstGreeting = chatRef.current.find((m) => m.sender === 'ai');
-        const initial = firstGreeting ? [firstGreeting] : [];
-        chatRef.current = initial;
-        setChatHistory(initial);
+        // Keep visible history until the server confirms the clear operation.
         background('clear_chat');
     }
     async function handleAddRequest(req: Pick<RequestItem, 'title' | 'category' | 'deliveryFormat'>): Promise<RequestItem> {
@@ -211,6 +209,7 @@ export default function App() {
         </button>
         <button type="button" className="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs" onClick={() => background('refresh')}>{uiT("Обновить данные")}</button>
       </div>
+      <p className="mt-2 text-[10px] text-amber-200/90">{uiT('Конкурсный прототип · Неофициальный сервис · Вымышленные данные')}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setEnglish(!english)} aria-label={english ? 'Русский' : 'English'} className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500">
           {uiT(english ? 'Русский' : 'English')}
@@ -237,6 +236,7 @@ export default function App() {
         </details>
       </div>
     </div>
+    <ConnectionStatus/>
     {uiT(actionError && <p role="alert" className="bg-rose-50 p-4 text-rose-800">{uiT(actionError)}<button onClick={() => setActionError('')} className="ml-3 underline">{uiT("OK")}</button></p>)}
     <AnimatePresence mode="wait" initial={false} custom={direction}><motion.div key={activeTab} custom={direction} variants={pageVariants} initial="enter" animate="center" exit="exit" transition={{ x: { type: 'spring', stiffness: 420, damping: 40 }, opacity: { duration: 0.18 } }}>
       {uiT(activeTab === 'dashboard' && <DashboardView user={userProfile} schedule={schedule} notifications={notifications} requests={requests.filter(r => details[r.id]?.lifecycle !== 'cancelled')} onNavigate={setActiveTab} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onOpenRequest={openRequest} priorities={<PrioritiesCard grades={grades} requests={requests} details={details} schedule={schedule} consultations={consultations} onOpenGrade={openGrade} onOpenRequest={openRequest} onNavigate={setActiveTab}/>}/>)}

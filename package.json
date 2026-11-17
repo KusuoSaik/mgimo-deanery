@@ -10,9 +10,12 @@
     "typecheck:api": "tsc -p tsconfig.api.json",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --import tsx tests/state-isolation.mts && node --import tsx tests/session-work.mts && node --import tsx tests/ai-limiter.mts && node --import tsx tests/ai-api.mts && node --import tsx tests/portal-domain.mts",
+    "test": "node --import tsx tests/state-isolation.mts && node --import tsx tests/session-work.mts && node --import tsx tests/ai-limiter.mts && node --import tsx tests/ai-api.mts && node --import tsx tests/portal-domain.mts && node --import tsx tests/security.mts && node --import tsx tests/schedule-calendar.mts && node --import tsx tests/refresh-identity.mts && node --import tsx tests/upcoming-class.mts && node --import tsx tests/request-json.mts",
     "test:browser": "node tests/browser-smoke.mjs",
-    "test:ai:shared": "node --import tsx tests/ai-multiprocess.mts"
+    "test:ai:shared": "node --import tsx tests/ai-multiprocess.mts",
+    "build:server": "tsc -p tsconfig.server.json",
+    "start": "node build-server/server/production.js",
+    "test:storage": "node --import tsx tests/storage-restart.mts"
   },
   "dependencies": {
     "@fontsource-variable/onest": "^5.3.1",

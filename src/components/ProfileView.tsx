@@ -30,12 +30,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, direction, onLog
     const { large, setLarge, contrast, setContrast, still, setStill } = usePreferences();
     const [privacyMode, setPrivacyMode] = useState(true);
     const [qrCounter, setQrCounter] = useState(QR_PERIOD);
-    const [qrToken, setQrToken] = useState('MGIMO-PASS-8841');
+    const [qrToken, setQrToken] = useState('DEMO-PASS-8841');
     useEffect(() => {
         const timer = setInterval(() => {
             setQrCounter((prev) => {
                 if (prev <= 1) {
-                    setQrToken(`MGIMO-PASS-${Math.floor(1000 + Math.random() * 9000)}`);
+                    setQrToken(`DEMO-PASS-${Math.floor(1000 + Math.random() * 9000)}`);
                     return QR_PERIOD;
                 }
                 return prev - 1;
@@ -96,7 +96,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, direction, onLog
               </AnimatePresence>
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium">{uiT("Пропуск в корпус")}</p>
+              <p className="text-sm font-medium">{uiT("Демо-пропуск")}</p>
               <p className="mt-1 flex items-center gap-2 text-xs text-slate-300">
                 <TimerRing value={qrCounter}/>
                 <span className="tabular">{uiT("Новый код через ")}{uiT(qrCounter)}{uiT(" с")}</span>
@@ -104,6 +104,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ user, direction, onLog
               <p className="tabular mt-2 truncate text-[11px] text-slate-500">{uiT(qrToken)}</p>
             </div>
           </div>
+          <p className="relative mt-3 text-xs text-slate-300">{uiT("Декоративный код. Не сканируется и не используется для прохода.")}</p>
         </motion.section>
 
         <section className="card p-4"><h2 className="text-xs text-slate-500">{uiT("Направление подготовки")}</h2><p className="mt-1 text-sm font-medium text-slate-900">{direction}</p></section>

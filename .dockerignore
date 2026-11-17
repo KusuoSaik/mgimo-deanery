@@ -1,0 +1,9 @@
+node_modules
+dist
+build-server
+.git
+.env*
+!.env.example
+*.zip
+artifacts
+docs/evidence

@@ -5,7 +5,7 @@ import { motion } from '../motion';
 import { AnimatePresence } from 'framer-motion';
 import { Bell, CalendarDays, CircleCheck, Clock, DoorOpen, FileText, Footprints, GraduationCap, IdCard, Info, MapPin, Sparkles, TriangleAlert, } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { findUpcomingClass, formatCountdown } from '../scheduleUtils';
+import { findUpcomingClass, formatCountdown, moscowClock } from '../scheduleUtils';
 import type { NotificationItem, RequestItem, ScheduleItem, TabType, UserProfile } from '../types';
 import { BottomSheet } from './BottomSheet';
 import { Avatar, Badge, EmptyState, PageHeader, RollingText, SectionTitle, Segmented } from './ui/primitives';
@@ -36,6 +36,7 @@ function sameDay(a: Date, b: Date): boolean {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 function dayLabel(date: Date, now: Date, locale = 'ru-RU'): string {
+    date = moscowClock(date); now = moscowClock(now);
     if (sameDay(date, now))
         return 'Сегодня';
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -277,7 +278,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
         </ol>
       </BottomSheet>
 
-      <BottomSheet isOpen={studakOpen} onClose={() => setStudakOpen(false)} tone="dark" title={uiT("Студенческий билет")} subtitle={uiT("Покажите на входе в корпус")}>
+      <BottomSheet isOpen={studakOpen} onClose={() => setStudakOpen(false)} tone="dark" title={uiT("Студенческий билет")} subtitle={uiT("Демо-карточка · Не даёт права прохода")}>
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-5 ring-1 ring-white/10">
           <Guilloche draw className="absolute -right-24 -top-20 h-80 w-80 text-amber-300/20"/>
           <div className="relative flex items-start justify-between">
@@ -299,7 +300,7 @@ export default function DashboardView({ user, schedule, notifications, requests,
             <div className="rounded-xl bg-white p-1.5">
               <PseudoQr token={`${user.studentId}-${user.group}`} className="h-20 w-20"/>
             </div>
-            <p className="text-xs leading-relaxed text-slate-300">{uiT("Код обновляется каждую минуту. Подробнее и с таймером в профиле.")}</p>
+            <p className="text-xs leading-relaxed text-slate-300">{uiT("Декоративный код. Не сканируется и не используется для прохода.")}</p>
           </div>
         </div>
       </BottomSheet>

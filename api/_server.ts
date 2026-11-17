@@ -3,7 +3,8 @@ import { availableSlots, academicResults, directionFor, requestDetails } from '.
 import type { RequestDetails, Consultation } from '../src/portalDomain.js';
 import { loadState } from '../server/stateStore.js';
 import { env } from 'node:process';
-import { createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ACCOUNTS_DATABASE } from '../src/auth/accountsDatabase.js';
 import type { ChatMessage, NotificationItem, RequestItem } from '../src/types.js';
@@ -18,8 +19,8 @@ export type ApiResponse = ServerResponse & {
 const SESSION_COOKIE = 'mgimo_session';
 const STATE_COOKIE = 'mgimo_state';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-if ((env.VERCEL || env.NODE_ENV === 'production') && !env.SESSION_SECRET) {
-  throw new Error('SESSION_SECRET must be configured in the deployment environment');
+if ((env.VERCEL || env.NODE_ENV === 'production') && (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32 || env.SESSION_SECRET === 'replace-with-a-long-random-secret')) {
+  throw new Error('SESSION_SECRET must contain at least 32 random characters');
 }
 const SECRET = env.SESSION_SECRET || 'local-development-only-change-this-secret';
 
@@ -63,7 +64,9 @@ function signSession(userId: string, expiresAt: number): string {
 
 function verifySession(token: string | undefined): { userId: string; expiresAt: number } | null {
   if (!token) return null;
-  const [userId, expiryText, signature] = token.split('.');
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [userId, expiryText, signature] = parts;
   const expiresAt = Number(expiryText);
   if (!userId || !signature || !Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
   const expected = createHmac('sha256', SECRET).update(`${userId}.${expiresAt}`).digest('base64url');
@@ -75,7 +78,7 @@ function verifySession(token: string | undefined): { userId: string; expiresAt: 
 
 function cookieOptions(request: ApiRequest, maxAge: number): string {
   const host = String(request.headers.host || '');
-  const secure = host && !host.startsWith('localhost') && !host.startsWith('127.0.0.1') ? '; Secure' : '';
+  const secure = env.NODE_ENV === 'production' || env.VERCEL || !/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? '; Secure' : '';
   return `Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`;
 }
 
@@ -108,12 +111,14 @@ export function findAccount(login: string): StoredAccount | undefined {
   });
 }
 
-export function verifyPassword(account: StoredAccount, password: string): boolean {
-  const expectedText = PASSWORD_HASHES[account.email.toLowerCase()];
-  if (!expectedText) return false;
-  const actual = scryptSync(password, account.email.toLowerCase(), 64);
+const derivePassword = promisify(scrypt);
+export async function verifyPassword(account: StoredAccount | undefined, password: string): Promise<boolean> {
+  // Unknown accounts perform the same expensive operation to avoid a timing oracle.
+  const email = account?.email.toLowerCase() ?? 'unknown-demo-account';
+  const expectedText = PASSWORD_HASHES[email] ?? '00'.repeat(64);
+  const actual = await derivePassword(password, email, 64) as Buffer;
   const expected = Buffer.from(expectedText, 'hex');
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  return timingSafeEqual(actual, expected) && Boolean(account);
 }
 
 export function getAuthenticatedAccount(request: ApiRequest): StoredAccount | null {
@@ -166,18 +171,31 @@ export function responseHelpers(response: ApiResponse): void {
 }
 
 export async function readBody(request: ApiRequest): Promise<Record<string, unknown>> {
-  if (request.body && typeof request.body === 'object') return request.body as Record<string, unknown>;
+  const limit = 256 * 1024;
+  function validate(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid JSON body');
+    if (Buffer.byteLength(JSON.stringify(value)) > limit) throw new Error('Body too large');
+    return value as Record<string, unknown>;
+  }
+  if (request.body !== undefined) return validate(typeof request.body === 'string' ? JSON.parse(request.body) : request.body);
+  if (Number(request.headers['content-length']) > limit) throw new Error('Body too large');
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  let size = 0;
+  for await (const chunk of request) {
+    const bytes = Buffer.from(chunk);
+    size += bytes.length;
+    if (size > limit) throw new Error('Body too large');
+    chunks.push(bytes);
+  }
   if (!chunks.length) return {};
   const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-  if (!parsed || typeof parsed !== 'object') throw new Error('Invalid JSON body');
-  return parsed as Record<string, unknown>;
+  return validate(parsed);
 }
 
 export { SESSION_COOKIE, STATE_COOKIE, SESSION_TTL_MS };
 
 export function isAllowedOrigin(req: ApiRequest): boolean {
+  if (req.headers['sec-fetch-site'] === 'cross-site') return false;
   const origin = req.headers.origin;
   if (!origin) return true;
   const allowed = (env.ALLOWED_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean);

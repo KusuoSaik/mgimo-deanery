@@ -68,6 +68,7 @@ export default function RequestsView({ user, requests, onAddRequest, details = {
     const [certificateRequest, setCertificateRequest] = useState<RequestItem | null>(null);
     const submitLock = useRef(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState('');
     const selectedRequest = requests.find((item) => item.id === selectedId) ?? null;
     const filteredRequests = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -94,6 +95,7 @@ export default function RequestsView({ user, requests, onAddRequest, details = {
         if (!trimmedTitle)
             return;
         submitLock.current = true;
+        setSubmitError('');
         setIsSubmitting(true);
         try {
             const created = await onAddRequest({ title: trimmedTitle, category, deliveryFormat });
@@ -106,8 +108,8 @@ export default function RequestsView({ user, requests, onAddRequest, details = {
             setDetailOpen(true);
             setIsFormOpen(false);
         }
-        catch {
-            // App displays the error; leave this form open for retry.
+        catch (error) {
+            setSubmitError(error instanceof Error ? error.message : 'Не удалось сохранить');
         }
         finally {
             submitLock.current = false;
@@ -187,6 +189,7 @@ export default function RequestsView({ user, requests, onAddRequest, details = {
       </div>
 
       <BottomSheet isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title={uiT("Новая заявка")} subtitle={uiT("ФИО и группа подставятся из профиля. Паспорт не нужен.")}>
+        {submitError && <p role="alert" className="mb-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{uiT(submitError)}</p>}
         <form onSubmit={submitRequest} className="space-y-5">
           <div>
             <label htmlFor="request-title" className="mb-1.5 block text-[13px] font-medium text-slate-700">{uiT("Какой документ нужен")}</label>

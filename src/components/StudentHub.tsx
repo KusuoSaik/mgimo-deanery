@@ -2,7 +2,7 @@ import { useUI } from '../i18n';
 import { usePreferences } from '../preferences';
 import { useRef, useState } from 'react';
 import type { GradeItem, RequestItem, ScheduleItem, TabType, UserProfile } from '../types';
-import { academicWeekType, findUpcomingClass, weekdayLabel } from '../scheduleUtils';
+import { academicWeekType, findUpcomingClass, weekdayLabel, moscowClock } from '../scheduleUtils';
 type Props = {
     user: UserProfile;
     grades: GradeItem[];
@@ -29,7 +29,7 @@ export default function StudentHub({ grades, schedule, requests, onNavigate, onO
     const upcoming = findUpcomingClass(schedule, new Date());
     const risk = grades.filter(g => g.status === 'Требует внимания');
     const pending = requests.filter(r => r.stage < 5);
-    const monday = new Date();
+    const monday = moscowClock();
     monday.setHours(0, 0, 0, 0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) + weekOffset * 7);
     const titles: Record<string, string> = { study: 'Справка об обучении', visa: 'Справка для продления студенческой визы', retake: 'Заявление на пересдачу' };

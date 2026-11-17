@@ -24,6 +24,28 @@ try {
   const owner = (await api('/api/student')).account.id;
   await api('/api/student', { action: 'reset_demo', ownerId: owner }); await page.reload(); await page.getByRole('heading', { name: 'Что требует внимания' }).waitFor();
   assert.equal(await page.getByRole('tab', { name: 'Деканат', exact: true }).count(), 0);
+  await page.screenshot({ path: out + '/dashboard-clean-360.png', fullPage: true });
+  await nav().getByRole('button', { name: 'Расписание', exact: true }).click();
+  await page.getByRole('tab', { name: 'Неделя', exact: true }).click();
+  await page.getByRole('region', { name: 'Расписание на неделю', exact: true }).waitFor();
+  await noOverflow('Full week 360');
+  await page.screenshot({ path: out + '/schedule-week-360.png', fullPage: true });
+  const calendarDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'В календарь', exact: true }).click();
+  const calendar = await calendarDownload;
+  assert(calendar.suggestedFilename().endsWith('.ics'));
+  const ics = await readFile(await calendar.path(), 'utf8');
+  assert(ics.includes('BEGIN:VCALENDAR') && ics.includes('TZID:Europe/Moscow'));
+  assert(ics.includes('BEGIN:VEVENT'));
+  assert(ics.endsWith('END:VCALENDAR\r\n'));
+  assert(!ics.includes(owner) && !ics.includes('sokolov@'));
+  await context.setOffline(true);
+  await page.getByRole('status').getByText('Нет соединения.', { exact: false }).waitFor();
+  await page.screenshot({ path: out + '/offline-360.png', fullPage: false });
+  await context.setOffline(false);
+  await page.getByRole('status').getByText('Нет соединения.', { exact: false }).waitFor({ state: 'hidden' });
+  await nav().getByRole('button', { name: 'Главная', exact: true }).click();
+
   // A priority opens the exact at-risk subject, with a persistent booking form.
   await page.getByRole('region', { name: 'Что требует внимания', exact: true }).getByRole('button').filter({ hasText: 'Микроэкономика' }).click();
   let dialog = page.getByRole('dialog'); await dialog.getByRole('heading', { name: 'Микроэкономика', exact: true }).waitFor();
@@ -37,6 +59,16 @@ try {
   // New request, cancellation, and persistence.
   await nav().getByRole('button', { name: 'Заявки', exact: true }).click(); await page.getByRole('button', { name: 'Новая заявка', exact: true }).click();
   await page.locator('#request-title').pressSequentially('Тестовая справка'); assert.equal(await page.locator('#request-title').inputValue(), 'Тестовая справка');
+  await context.route('**/api/student', async route => {
+    const body = route.request().postDataJSON();
+    if (body?.action === 'create_request') return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Тест: деканат временно недоступен' }) });
+    return route.continue();
+  });
+  await page.getByRole('button', { name: 'Отправить в деканат', exact: true }).click();
+  await page.getByRole('dialog').getByRole('alert').getByText('Тест: деканат временно недоступен', { exact: true }).waitFor();
+  assert.equal(await page.locator('#request-title').inputValue(), 'Тестовая справка');
+  await page.screenshot({ path: out + '/request-error-360.png', fullPage: false });
+  await context.unroute('**/api/student');
   await page.getByRole('button', { name: 'Отправить в деканат', exact: true }).click();
   dialog = page.getByRole('dialog'); await dialog.getByRole('heading', { name: 'Тестовая справка', exact: true }).waitFor();
   const request = (await api('/api/student')).account.requestsData.find(r => r.title === 'Тестовая справка'); assert(request);
@@ -66,6 +98,7 @@ try {
   for (const width of [360, 430, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     for (const section of ['Главная', 'Расписание', 'БРС', 'Заявки', 'ИИ-бот', 'Профиль']) { await nav().getByRole('button', { name: section, exact: true }).click(); await noOverflow(`${section} ${width}`); }
+    await nav().getByRole('button', { name: 'Расписание', exact: true }).click(); await page.getByRole('tab', { name: 'Неделя', exact: true }).click(); await noOverflow('Week ' + width); await page.screenshot({ path: out + `/schedule-week-${width}.png`, fullPage: true });
     await nav().getByRole('button', { name: 'Главная', exact: true }).click(); await page.getByRole('heading', { name: 'Что требует внимания', exact: true }).waitFor(); await pause(1100); await page.screenshot({ path: out + `/home-${width}-ru.png`, fullPage: true });
   }
   await page.setViewportSize({ width: 360, height: 800 }); await page.getByRole('button', { name: 'English', exact: true }).click(); await page.getByRole('heading', { name: 'Needs attention', exact: true }).waitFor();
@@ -82,6 +115,6 @@ try {
   await page.getByLabel('Message the assistant', { exact: true }).fill('Old account message'); await page.getByRole('button', { name: 'Send', exact: true }).click();
   await nav().getByRole('button', { name: 'Profile', exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click(); await page.locator('#login').waitFor(); await page.locator('#login').fill('a.volkov@my.mgimo.ru'); await page.locator('#password').fill('mgimo2026'); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await page.getByRole('heading', { name: 'Needs attention', exact: true }).waitFor(); finishOld(); await pause(200); await nav().getByRole('button', { name: 'Assistant', exact: true }).click(); assert(!(await page.locator('body').innerText()).includes('OLD_ACCOUNT_RESPONSE')); assert(!(await page.locator('body').innerText()).includes('Old account message'));
   assert.deepEqual(errors, []);
-  console.log('PASS: 360/430/1280, two students + staff, priority links, persisted consultation, clarification roundtrip, stage permissions, cancellation, actual PDF download, modal focus, RU/EN, accessibility, AI navigation lock and late-response isolation. AI mocked. Storage: local memory unless DATABASE_URL provided.');
+  console.log('PASS: weekly overview, ICS download, offline warning, 360/430/1280, two students + staff, priority links, persisted consultation, clarification roundtrip, stage permissions, cancellation, actual PDF download, modal focus, RU/EN, accessibility, AI navigation lock and late-response isolation. AI mocked. Storage:', process.env.DATABASE_URL ? 'PostgreSQL' : 'local memory');
 } catch (e) { console.error(logs.slice(-1500)); console.error('PAGE ERRORS', errors); if (page) { console.error((await page.locator('body').innerText()).slice(-2000)); await page.screenshot({ path: out + '/failure.png', fullPage: true }).catch(() => undefined); } throw e; }
 finally { await browser?.close(); for (const c of children) c.kill('SIGTERM'); }

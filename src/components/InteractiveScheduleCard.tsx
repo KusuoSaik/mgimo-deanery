@@ -1,3 +1,4 @@
+import { moscowClock } from '../scheduleUtils';
 import { useUI } from '../i18n';
 import { useEffect, useState } from 'react';
 import { motion } from '../motion';
@@ -34,7 +35,8 @@ export const InteractiveScheduleCard = ({ item, index, isToday = false }: Intera
     const [checkIn, setCheckIn] = useState<'idle' | 'checking' | 'done'>('idle');
     const [start, end] = splitTime(item.time);
     const tone = CLASS_TYPE_TONE[item.type];
-    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+    const clock = moscowClock();
+    const nowMinutes = clock.getHours() * 60 + clock.getMinutes();
     const live = isToday && nowMinutes >= minutesOf(start) && nowMinutes < minutesOf(end || start);
     const past = isToday && end !== '' && nowMinutes >= minutesOf(end);
     useEffect(() => {
@@ -45,7 +47,7 @@ export const InteractiveScheduleCard = ({ item, index, isToday = false }: Intera
     }, [checkIn]);
     const doneCount = checked.filter(Boolean).length;
     const verdict = score >= AUTO_PASS
-        ? { text: 'Автомат: экзамен можно не сдавать', tone: 'bg-emerald-50 text-emerald-700 ring-emerald-200' }
+        ? { text: 'Демо-порог автомата достигнут', tone: 'bg-emerald-50 text-emerald-700 ring-emerald-200' }
         : score >= ADMISSION
             ? { text: `Допуск есть. До автомата ${AUTO_PASS - score} ${AUTO_PASS - score === 1 ? 'балл' : 'баллов'}`, tone: 'bg-blue-50 text-blue-700 ring-blue-200' }
             : { text: `До допуска не хватает ${ADMISSION - score} баллов`, tone: 'bg-amber-50 text-amber-800 ring-amber-200' };
@@ -132,7 +134,7 @@ export const InteractiveScheduleCard = ({ item, index, isToday = false }: Intera
               <h4 className="text-[15px] font-semibold tracking-tight text-slate-900">{uiT("Калькулятор баллов")}</h4>
               <span className="tabular text-2xl font-semibold tracking-tight text-slate-900">{uiT(score)}</span>
             </div>
-            <p className="mt-0.5 text-xs text-slate-500">{uiT("Сдвиньте, чтобы прикинуть итог по БРС")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{uiT("Учебная модель: пороги условные. Условия зачёта уточните у преподавателя.")}</p>
 
             <div className="relative mt-4 h-6">
               <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-slate-100">
@@ -154,15 +156,16 @@ export const InteractiveScheduleCard = ({ item, index, isToday = false }: Intera
             </AnimatePresence>
           </section>
 
+          <p className="text-xs text-slate-500">{uiT("Демонстрация: геопозиция не запрашивается, посещаемость не записывается. Чек-лист сохраняется только до выхода из раздела.")}</p>
           <motion.button type="button" layout disabled={checkIn !== 'idle'} onClick={() => setCheckIn('checking')} className={`pressable flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-sm transition-colors ${checkIn === 'done' ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'} disabled:cursor-default`}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.span key={checkIn} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="inline-flex items-center gap-2">
                 {uiT(checkIn === 'idle' && (<>
-                    <MapPinCheck className="h-4 w-4"/>{uiT("Отметиться на паре")}</>))}
+                    <MapPinCheck className="h-4 w-4"/>{uiT("Попробовать демо-отметку")}</>))}
                 {uiT(checkIn === 'checking' && (<>
-                    <LoaderCircle className="h-4 w-4 animate-spin"/>{uiT("Проверяем геопозицию в кампусе")}</>))}
+                    <LoaderCircle className="h-4 w-4 animate-spin"/>{uiT("Показываем демо-сценарий")}</>))}
                 {uiT(checkIn === 'done' && (<>
-                    <Check className="h-4 w-4" strokeWidth={3}/>{uiT("Вы отмечены на паре")}</>))}
+                    <Check className="h-4 w-4" strokeWidth={3}/>{uiT("Демо-отметка показана")}</>))}
               </motion.span>
             </AnimatePresence>
           </motion.button>

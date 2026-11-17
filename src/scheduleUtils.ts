@@ -4,6 +4,13 @@ export const WEEK_DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'] as con
 
 export type WeekParity = 'even' | 'odd';
 
+/** Moscow wall-clock fields for calendar UI; not an instant for elapsed-time arithmetic. */
+export function moscowClock(instant = new Date()): Date {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(instant);
+  const value = (name: string) => Number(parts.find(p => p.type === name)?.value);
+  return new Date(value('year'), value('month') - 1, value('day'), value('hour'), value('minute'), value('second'));
+}
+
 /** Чётность учебной недели от понедельника недели, в которую попадает 1 сентября. */
 export function academicWeekType(date: Date): WeekParity {
   const year = date.getMonth() >= 8 ? date.getFullYear() : date.getFullYear() - 1;
@@ -25,8 +32,10 @@ export function weekdayLabel(date: Date): ScheduleItem['day'] | null {
 }
 
 function parseTimeRange(time: string): { start: number; end: number } | null {
-  const match = time.match(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/);
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})$/);
   if (!match) return null;
+  const [sh, sm, eh, em] = match.slice(1).map(Number);
+  if (sh > 23 || eh > 23 || sm > 59 || em > 59 || eh * 60 + em <= sh * 60 + sm) return null;
   return {
     start: Number(match[1]) * 60 + Number(match[2]),
     end: Number(match[3]) * 60 + Number(match[4]),
@@ -34,9 +43,7 @@ function parseTimeRange(time: string): { start: number; end: number } | null {
 }
 
 function atMinutes(day: Date, minutes: number): Date {
-  const result = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
-  result.setMinutes(minutes);
-  return result;
+  return new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes) - 3 * 60 * 60 * 1000);
 }
 
 export type UpcomingClass = {
@@ -46,8 +53,10 @@ export type UpcomingClass = {
 };
 
 export function findUpcomingClass(schedule: ScheduleItem[], now: Date): UpcomingClass | null {
-  for (let offset = 0; offset < 8; offset += 1) {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+  const clock = moscowClock(now);
+  // Include the same weekday two weeks later after today's final class ends.
+  for (let offset = 0; offset <= 14; offset += 1) {
+    const day = new Date(clock.getFullYear(), clock.getMonth(), clock.getDate() + offset);
     const label = weekdayLabel(day);
     if (!label) continue;
 
